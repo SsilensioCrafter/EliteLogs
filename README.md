@@ -1,10 +1,12 @@
-# EliteLogs
+# EliteLogs - for admins, but admin.
 
-<img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/09dc411f-4e7c-48fe-95d5-9c65e9594f5d" />
+<img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/0533417a-3d93-4737-a78c-8cb6886b173d" />
 
 
-> ✨ A Minecraft plugin I **vibe-coded at 3AM** for server admins tired of chaos.  
-> Logs everything. Keeps it clean. Makes you feel like a pro (even if you’re just doomscrolling console).
+> ✨ **EliteLogs** — a Minecraft plugin built for server admins who are done with messy, unreadable logs.  
+> It neatly records everything that matters: player activity, system events, errors, and warnings.  
+> With structured folders and per-player logs, you’ll always know where to look when chaos strikes.  
+
 
 ---
 
