@@ -1,5 +1,8 @@
 # EliteLogs
 
+<img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/09dc411f-4e7c-48fe-95d5-9c65e9594f5d" />
+
+
 > ✨ A Minecraft plugin I **vibe-coded at 3AM** for server admins tired of chaos.  
 > Logs everything. Keeps it clean. Makes you feel like a pro (even if you’re just doomscrolling console).
 
