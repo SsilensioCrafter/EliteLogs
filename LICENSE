@@ -1,6 +1,7 @@
 MIT License
 
-Copyright (c) 2025 SsilensioCrafter
+Copyright (c) 2025 SsilensioCrafter  
+Project: EliteLogs – Minecraft plugin for clean and structured logging
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -9,8 +10,15 @@ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
+
+2. If you use this Software publicly (e.g., in a GitHub repo, server distribution,
+   or showcase), a credit to "EliteLogs by SsilensioCrafter" is appreciated,
+   but not strictly required.
+
+3. This plugin is developed for Minecraft server admins, but is provided "AS IS"
+   without any guarantee it will make your life easier (though it probably will).
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -19,3 +27,16 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+Fun clause (non-binding, for vibes only):
+If your server explodes in logs, crashes at 3AM, or summons Herobrine,
+it’s officially a feature, not a bug.
+
+███████╗██╗     ██╗████████╗███████╗██╗      ██████╗  ██████╗  ██████╗ ███████╗
+██╔════╝██║     ██║╚══██╔══╝██╔════╝██║     ██╔═══██╗██╔════╝ ██╔═══██╗██╔════╝
+█████╗  ██║     ██║   ██║   █████╗  ██║     ██║   ██║██║  ███╗██║   ██║███████╗
+██╔══╝  ██║     ██║   ██║   ██╔══╝  ██║     ██║   ██║██║   ██║██║   ██║╚════██║
+███████╗███████╗██║   ██║   ███████╗███████╗╚██████╔╝╚██████╔╝╚██████╔╝███████║
+╚══════╝╚══════╝╚═╝   ╚═╝   ╚══════╝╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝ ╚══════╝
