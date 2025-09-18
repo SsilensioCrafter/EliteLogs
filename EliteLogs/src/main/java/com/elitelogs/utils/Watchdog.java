@@ -6,6 +6,8 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -49,13 +51,23 @@ public class Watchdog implements LogRouter.SinkListener {
 
             if (plugin.getConfig().getBoolean("watchdog.actions.create-crash-report", true)) {
                 String ts = new SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date());
-                File out = new File(plugin.getDataFolder(),
+                File crashTarget = new File(plugin.getDataFolder(),
                         "exports/inspector-report-CRASH-" + ts + ".zip");
                 try {
-                    Exporter.exportToday(plugin.getDataFolder());
-                    router.warn("[Watchdog] Crash report prepared: " + out.getAbsolutePath());
+                    File exported = Exporter.exportToday(plugin.getDataFolder());
+                    File finalFile = exported;
+                    if (!exported.equals(crashTarget)) {
+                        try {
+                            Files.createDirectories(crashTarget.toPath().getParent());
+                            Files.move(exported.toPath(), crashTarget.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                            finalFile = crashTarget;
+                        } catch (IOException moveError) {
+                            router.warn("[Watchdog] Failed to rename crash report to " + crashTarget.getName() + ": " + moveError.getMessage());
+                        }
+                    }
+                    router.warn("[Watchdog] Crash report prepared: " + finalFile.getAbsolutePath());
                     if (plugin.getConfig().getBoolean("watchdog.actions.discord-alert", true)) {
-                        DiscordAlerter.maybeSend("watchdog", "Crash report prepared: " + out.getName());
+                        DiscordAlerter.maybeSend("watchdog", "Crash report prepared: " + finalFile.getName());
                     }
                 } catch (IOException e) {
                     router.error("[Watchdog] Export failed: " + e.getMessage());

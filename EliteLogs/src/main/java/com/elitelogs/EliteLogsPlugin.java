@@ -49,7 +49,7 @@ public class EliteLogsPlugin extends JavaPlugin {
 
         // Listeners
         if (getConfig().getBoolean("logs.types.chat", true)) Bukkit.getPluginManager().registerEvents(new ChatListener(logRouter), this);
-        if (getConfig().getBoolean("logs.types.commands", true)) Bukkit.getPluginManager().registerEvents(new CommandListener(logRouter), this);
+        if (getConfig().getBoolean("logs.types.commands", true)) Bukkit.getPluginManager().registerEvents(new CommandListener(this, logRouter), this);
         if (getConfig().getBoolean("logs.types.combat", true)) Bukkit.getPluginManager().registerEvents(new DeathListener(logRouter), this);
         if (getConfig().getBoolean("logs.types.players", true)) Bukkit.getPluginManager().registerEvents(new JoinQuitListener(logRouter), this);
         if (getConfig().getBoolean("logs.types.combat", true)) Bukkit.getPluginManager().registerEvents(new CombatListener(logRouter), this);
@@ -72,7 +72,7 @@ public class EliteLogsPlugin extends JavaPlugin {
         if (getConfig().getBoolean("sessions.enabled", true)) sessionManager.begin();
 
         // Inspector
-        this.inspector = new Inspector(this);
+        this.inspector = new Inspector(this, lang);
         if (getConfig().getBoolean("inspector.enabled", true)) {
             // delay to allow other plugins finish enabling
             getServer().getScheduler().runTaskLater(this, inspector::runAll, 20L * 10);

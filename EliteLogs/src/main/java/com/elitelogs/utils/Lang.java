@@ -22,7 +22,10 @@ public class Lang {
             if (!file.exists()) copyRes("lang_"+code+".yml", file);
             File en = new File(langDir, "en.yml");
             if (!en.exists()) copyRes("lang_en.yml", en);
+            File ru = new File(langDir, "ru.yml");
+            if (!ru.exists()) copyRes("lang_ru.yml", ru);
         } catch (Exception ignored){}
+        if (!file.exists()) file = new File(langDir, "en.yml");
         this.lang = YamlConfiguration.loadConfiguration(file);
     }
 
@@ -46,7 +49,16 @@ public class Lang {
         }
         return v;
     }
-    public List<String> getList(String key){ return lang.getStringList(key); }
+    public List<String> getList(String key){
+        if (lang.contains(key)) return lang.getStringList(key);
+        try (InputStream in = plugin.getResource("lang_en.yml")) {
+            if (in != null) {
+                YamlConfiguration en = YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8));
+                return en.getStringList(key);
+            }
+        } catch (Exception ignored){}
+        return java.util.Collections.emptyList();
+    }
     public static String colorize(String s){ return s.replace("&","§"); }
     public String formatModule(String name, boolean ok){
         String key = ok ? "module-ok" : "module-fail";
