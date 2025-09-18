@@ -119,7 +119,8 @@ public class LogRouter {
 
     private void append(String category, String stampedLine) {
         String file = "global-" + today() + ".log";
-        logger(category).append(file, stampedLine);
+        FileLogger fileLogger = getLogger(category);
+        fileLogger.append(file, stampedLine);
     }
 
     private void appendPlayer(String category, UUID uuid, String playerName, String stampedLine) {
@@ -128,10 +129,11 @@ public class LogRouter {
         }
         String safeName = sanitizePlayerName(playerName);
         String folder = safeName != null ? safeName + "-" + uuid : uuid.toString();
-        logger(category + "/players/" + folder).append(today() + ".log", stampedLine);
+        FileLogger playerLogger = getLogger(category + "/players/" + folder);
+        playerLogger.append(today() + ".log", stampedLine);
     }
 
-    private FileLogger logger(String category) {
+    private FileLogger getLogger(String category) {
         return loggers.computeIfAbsent(category, key -> new FileLogger(new File(plugin.getDataFolder(), "logs/" + key)));
     }
 
