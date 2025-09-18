@@ -1,0 +1,15 @@
+plugin-enabled: "&aEliteLogs v{version} enabled."
+plugin-disabled: "&cEliteLogs disabled."
+modules-header: "=== Modules ==="
+module-ok: "&a[Modules] {name} .... OK"
+module-fail: "&c[Modules] {name} .... FAIL"
+
+help-header: "&8&l┏━━━━━━━━ &a&lElite&f&lLogs &7&l— &f&lCommands ━━━━━━━┓"
+help-footer: "&8&l┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+help-commands:
+  - "/elogs help       → show this help"
+  - "/elogs inspector  → run inspector"
+  - "/elogs metrics    → show metrics"
+  - "/elogs export     → export logs"
+  - "/elogs rotate     → archive old logs"
+  - "/elogs logs       → log categories"
