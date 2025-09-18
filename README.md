@@ -14,15 +14,20 @@
 ---
 
 ## ✨ Features
-- Logs everything an admin could dream of (except your bad decisions).
-- Per-player folders so you can stalk… I mean **monitor** responsibly.
-- Modules you can toggle, because freedom is cool.
-- Built with more caffeine than code.
+- Comprehensive logging: chat, commands, economy, combat, inventory, info, stats, console, sessions, warnings, errors, and more.
+- Per-player logs with dedicated folders (`logs/<module>/players/<uuid>`) and session histories (`logs/players/<playerName>/sessions`).
+- Global daily logs (`logs/<module>/global-YYYY-MM-DD.log`) for quick server-wide insights.
+- Configurable modules — enable or disable exactly what you need via `config.yml`.
+- Session reports for both server and players, stored separately for better tracking.
+- Discord integration: send errors, warnings, sessions, and watchdog alerts directly to your channel.
+- Inspector, metrics, suppressor, and watchdog subsystems included out of the box.
+- Legacy mode available for flat player log files, if you miss the old days.
+- Written with more caffeine than code — but stable enough to trust your server with.
 
 ---
 
 ## 🗺️ Roadmap
-- [ ] Add Warn & Reports logging  
+- [x] Add Warn & Reports logging  
 - [ ] Database support  
 - [ ] Fancy web panel (because who doesn’t love dashboards)  
 - [ ] Maybe AI log summarizer (so ChatGPT can tell you who’s sus)  
@@ -83,15 +88,15 @@ ansi:
 banner:
   enabled: true
   show-version: true
-  style: block         # block | mini (visual style for "LOGS")
-  color: default       # default | green | cyan | magenta
+  style: block         # Options: block | mini
+  color: default       # Options: default | green | cyan | magenta
 
 # Discord webhook integration
 discord:
   enabled: false
   webhook-url: ""             # Insert your Discord webhook URL
   rate-limit-seconds: 10      # Minimum delay between messages
-  send:                       # What to send to Discord
+  send:
     errors: true
     warns: true
     sessions: true
@@ -103,14 +108,16 @@ logs:
   rotate: true                # Rotate logs (create new files)
   keep-days: 30               # Keep logs for X days (-1 = forever)
   archive: true               # Archive old logs (zip/tar)
-  split-by-player: true       # Split logs into per-player folders
-  types:                      # Types of logs to record
+  split-by-player: true       # Write per-player logs in module folders
+  legacy:
+    flat-player-files: false  # Old style: player-Name-YYYY-MM-DD.log (not recommended)
+  types:
     info: true
     warns: true
     errors: true
     chat: true
     commands: true
-    players: true
+    players: true             # Keep traditional logs/players/<name>/sessions
     combat: true
     inventory: true
     economy: true
@@ -122,25 +129,27 @@ logs:
 sessions:
   enabled: true
   autosave-minutes: 10        # Auto-save session summary every N minutes
+  save-global: true           # Write global session reports to logs/sessions/global
+  save-players: true          # Write per-player session reports to logs/sessions/players/<uuid>
 
 # Inspector — collects server info
 inspector:
   enabled: true
-  include-mods: true          # List of loaded mods
-  include-configs: true       # Config files
-  include-garbage: true       # Garbage collector info
-  include-server-info: true   # Server version, plugins, etc.
+  include-mods: true
+  include-configs: true
+  include-garbage: true
+  include-server-info: true
 
 # Metrics (server health monitoring)
 metrics:
   enabled: true
-  interval-seconds: 60        # Collection interval (seconds)
+  interval-seconds: 60
 
 # Message suppressor / spam filter
 suppressor:
   enabled: true
-  mode: blacklist             # blacklist (block) | whitelist (allow only these)
-  spam-limit: 1000            # Limit for repeated messages
+  mode: blacklist             # Options: blacklist | whitelist
+  spam-limit: 1000
   filters: []                 # List of filters (regex or keywords)
 
 # Watchdog — emergency watchdog
