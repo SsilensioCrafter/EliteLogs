@@ -1,8 +1,10 @@
 package com.elitelogs.utils;
 
+import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 
 public class ConsoleTee {
     private final LogRouter router;
@@ -33,27 +35,49 @@ public class ConsoleTee {
     private class TeeOutputStream extends OutputStream {
         private final PrintStream base;
         private final boolean isErr;
-        private final StringBuilder buf = new StringBuilder();
+        private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+
         TeeOutputStream(PrintStream base, boolean isErr){ this.base = base; this.isErr = isErr; }
 
-        @Override public void write(int b){
+        @Override public synchronized void write(int b){
             base.write(b);
-            if (b == '\n' || b == '\r') { flushBuf(); }
-            else buf.append((char)b);
+            handleByte((byte) b);
         }
-        @Override public void write(byte[] b, int off, int len){
+
+        @Override public synchronized void write(byte[] b, int off, int len){
             base.write(b, off, len);
-            for (int i=off; i<off+len; i++){
-                int ch = b[i];
-                if (ch == '\n' || ch == '\r'){ flushBuf(); }
-                else buf.append((char)ch);
+            for (int i = off; i < off + len; i++) {
+                handleByte(b[i]);
             }
         }
-        private void flushBuf(){
-            String line = buf.toString();
-            buf.setLength(0);
-            if (line.isEmpty()) return;
-            String up = line.toUpperCase();
+
+        @Override public synchronized void flush() {
+            base.flush();
+            flushBuffer();
+        }
+
+        @Override public synchronized void close() {
+            flush();
+        }
+
+        private void handleByte(byte b) {
+            if (b == '\n' || b == '\r') {
+                flushBuffer();
+            } else {
+                buffer.write(b);
+            }
+        }
+
+        private void flushBuffer(){
+            if (buffer.size() == 0) {
+                return;
+            }
+            String line = new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+            buffer.reset();
+            if (line.isEmpty()) {
+                return;
+            }
+            String up = line.toUpperCase(Locale.ROOT);
             if (isErr || up.contains("[ERROR") || up.startsWith("ERROR") || up.contains(" ERROR ")) {
                 router.error(line);
                 router.console(line);
@@ -62,8 +86,9 @@ public class ConsoleTee {
                 router.warn(line);
                 router.console(line);
             }
-            else
+            else {
                 router.console(line);
+            }
         }
     }
 }
