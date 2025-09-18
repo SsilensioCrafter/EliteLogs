@@ -1,5 +1,6 @@
 package com.elitelogs.utils;
 
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.Plugin;
 
 import java.io.File;
@@ -7,6 +8,8 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -27,10 +30,17 @@ public class LogRouter {
     private final ZoneId zoneId = ZoneId.systemDefault();
     private final DateTimeFormatter dayFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ROOT);
     private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT);
+    private volatile ConfigSnapshot configSnapshot;
 
     public LogRouter(Plugin plugin) {
         this.plugin = plugin;
         this.suppressor = new Suppressor(plugin);
+        reloadConfig();
+    }
+
+    public void reloadConfig() {
+        this.suppressor.reload();
+        this.configSnapshot = ConfigSnapshot.from(plugin);
     }
 
     public void addListener(SinkListener listener) {
@@ -91,7 +101,8 @@ public class LogRouter {
     }
 
     public String write(String category, String message) {
-        if (!isCategoryEnabled(category)) {
+        ConfigSnapshot snapshot = this.configSnapshot;
+        if (snapshot == null || !snapshot.isCategoryEnabled(category)) {
             return null;
         }
         Suppressor.Result result = suppressor.filter(category, message);
@@ -105,7 +116,7 @@ public class LogRouter {
         } else if ("warns".equals(category)) {
             DiscordAlerter.maybeSend("warns", result.line);
         }
-        if (result.summary != null && isCategoryEnabled("suppressed")) {
+        if (result.summary != null && snapshot != null && snapshot.isCategoryEnabled("suppressed")) {
             append("suppressed", stamp(result.summary));
         }
         notifyListeners(category, result.line);
@@ -127,7 +138,8 @@ public class LogRouter {
     }
 
     private void appendPlayer(String category, UUID uuid, String playerName, String stampedLine) {
-        if (!plugin.getConfig().getBoolean("logs.split-by-player", true)) {
+        ConfigSnapshot snapshot = this.configSnapshot;
+        if (snapshot == null || !snapshot.splitByPlayer) {
             return;
         }
         String folder = playerFolder(uuid, playerName);
@@ -157,10 +169,8 @@ public class LogRouter {
     }
 
     private boolean isCategoryEnabled(String category) {
-        if ("suppressed".equals(category)) {
-            return plugin.getConfig().getBoolean("logs.types.suppressed", true);
-        }
-        return plugin.getConfig().getBoolean("logs.types." + category, true);
+        ConfigSnapshot snapshot = this.configSnapshot;
+        return snapshot == null || snapshot.isCategoryEnabled(category);
     }
 
     private static String playerFolder(UUID uuid, String playerName) {
@@ -190,5 +200,35 @@ public class LogRouter {
             return null;
         }
         return sanitized;
+    }
+
+    private static final class ConfigSnapshot {
+        final boolean splitByPlayer;
+        final Map<String, Boolean> categories;
+
+        private ConfigSnapshot(boolean splitByPlayer, Map<String, Boolean> categories) {
+            this.splitByPlayer = splitByPlayer;
+            this.categories = categories;
+        }
+
+        static ConfigSnapshot from(Plugin plugin) {
+            Map<String, Boolean> categories = new HashMap<>();
+            ConfigurationSection section = plugin.getConfig().getConfigurationSection("logs.types");
+            if (section != null) {
+                for (String key : section.getKeys(false)) {
+                    categories.put(key, section.getBoolean(key, true));
+                }
+            }
+            boolean split = plugin.getConfig().getBoolean("logs.split-by-player", true);
+            return new ConfigSnapshot(split, Collections.unmodifiableMap(categories));
+        }
+
+        boolean isCategoryEnabled(String category) {
+            Boolean value = categories.get(category);
+            if (value == null) {
+                return true;
+            }
+            return value;
+        }
     }
 }

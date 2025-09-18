@@ -24,7 +24,10 @@ public class EpicCmd implements CommandExecutor, TabCompleter {
         if (args.length == 0 || args[0].equalsIgnoreCase("help")) return help(sender);
         switch (args[0].toLowerCase(java.util.Locale.ROOT)) {
             case "reload":
-                plugin.reloadConfig(); lang.load(); DiscordAlerter.init(plugin);
+                plugin.reloadConfig();
+                lang.load();
+                DiscordAlerter.init(plugin);
+                router.reloadConfig();
                 sender.sendMessage(Lang.colorize(lang.get("command-reload"))); return true;
             case "version":
                 sender.sendMessage(Lang.colorize("&dEliteLogs &7v" + plugin.getDescription().getVersion())); return true;
