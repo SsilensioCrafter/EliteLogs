@@ -1,4 +1,4 @@
-# EliteLogs - for admins, but admin.
+# EliteLogs - for admins, by admin.
 
 <img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/0533417a-3d93-4737-a78c-8cb6886b173d" />
 
