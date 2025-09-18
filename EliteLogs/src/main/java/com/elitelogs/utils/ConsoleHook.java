@@ -1,10 +1,13 @@
 package com.elitelogs.utils;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.logging.*;
 
 public class ConsoleHook {
     private final LogRouter router;
     private Handler handler;
+    private final Formatter formatter = new SimpleFormatter();
 
     public ConsoleHook(LogRouter router){ this.router = router; }
 
@@ -12,7 +15,15 @@ public class ConsoleHook {
         Logger root = LogManager.getLogManager().getLogger("");
         handler = new Handler() {
             @Override public void publish(LogRecord r) {
-                String line = r.getLevel().getName() + ": " + r.getMessage();
+                String formatted = formatter.formatMessage(r);
+                if (r.getThrown() != null) {
+                    StringWriter sw = new StringWriter();
+                    try (PrintWriter pw = new PrintWriter(sw)) {
+                        r.getThrown().printStackTrace(pw);
+                    }
+                    formatted = formatted + System.lineSeparator() + sw;
+                }
+                String line = r.getLevel().getName() + ": " + formatted;
                 boolean consoleAlreadyLogged = false;
                 if (r.getLevel().intValue() >= Level.SEVERE.intValue()) {
                     router.error(line);
