@@ -1,7 +1,9 @@
 package com.elitelogs.utils;
 
 import org.bukkit.plugin.Plugin;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Suppressor {
     public static class Result {
@@ -19,7 +21,7 @@ public class Suppressor {
     private final Plugin plugin;
     private final int spamLimit;
     private final List<String> filters;
-    private final Map<String,Integer> repeats = new HashMap<>();
+    private final Map<String,Integer> repeats = new ConcurrentHashMap<>();
 
     public Suppressor(Plugin plugin){
         this.plugin = plugin;
@@ -27,13 +29,14 @@ public class Suppressor {
         this.filters = plugin.getConfig().getStringList("suppressor.filters");
     }
 
-    public Result filter(String line){
+    public Result filter(String category, String line){
+        String key = category + "\u0000" + line;
         // лимитер повторов
-        int n = repeats.merge(line, 1, Integer::sum);
+        int n = repeats.merge(key, 1, Integer::sum);
         if (n > spamLimit) return Result.drop();
         if (n == spamLimit) {
             return Result.allowWithSummary(line + " (suppressed " + (n-1) + " repeats)",
-                    "[suppressed] '" + line + "' x" + (n-1));
+                    "[suppressed][" + category + "] '" + line + "' x" + (n-1));
         }
         // чёрный список
         boolean match = false;

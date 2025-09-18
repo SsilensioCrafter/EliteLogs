@@ -13,18 +13,24 @@ public class ConsoleHook {
         handler = new Handler() {
             @Override public void publish(LogRecord r) {
                 String line = r.getLevel().getName() + ": " + r.getMessage();
+                boolean consoleAlreadyLogged = false;
                 if (r.getLevel().intValue() >= Level.SEVERE.intValue()) {
                     router.error(line);
                 } else if (r.getLevel().intValue() >= Level.WARNING.intValue()) {
                     router.warn(line);
                 } else {
                     String up = line.toUpperCase();
-if (up.contains("] [ERROR") || up.startsWith("ERROR") || up.contains(" ERROR "))
-    router.error(line);
-else if (up.contains("] [WARN") || up.startsWith("WARN") || up.contains(" WARN "))
-    router.warn(line);
-else
-    router.console(line);
+                    if (up.contains("] [ERROR") || up.startsWith("ERROR") || up.contains(" ERROR ")) {
+                        router.error(line);
+                    } else if (up.contains("] [WARN") || up.startsWith("WARN") || up.contains(" WARN ")) {
+                        router.warn(line);
+                    } else {
+                        router.console(line);
+                        consoleAlreadyLogged = true;
+                    }
+                }
+                if (!consoleAlreadyLogged) {
+                    router.console(line);
                 }
             }
             @Override public void flush(){}

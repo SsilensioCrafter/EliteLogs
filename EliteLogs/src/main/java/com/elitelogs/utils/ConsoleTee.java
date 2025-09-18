@@ -38,14 +38,14 @@ public class ConsoleTee {
 
         @Override public void write(int b){
             base.write(b);
-            if (b == '\n'){ flushBuf(); }
+            if (b == '\n' || b == '\r') { flushBuf(); }
             else buf.append((char)b);
         }
         @Override public void write(byte[] b, int off, int len){
             base.write(b, off, len);
             for (int i=off; i<off+len; i++){
                 int ch = b[i];
-                if (ch == '\n'){ flushBuf(); }
+                if (ch == '\n' || ch == '\r'){ flushBuf(); }
                 else buf.append((char)ch);
             }
         }
@@ -54,10 +54,14 @@ public class ConsoleTee {
             buf.setLength(0);
             if (line.isEmpty()) return;
             String up = line.toUpperCase();
-            if (isErr || up.contains("[ERROR") || up.startsWith("ERROR") || up.contains(" ERROR "))
+            if (isErr || up.contains("[ERROR") || up.startsWith("ERROR") || up.contains(" ERROR ")) {
                 router.error(line);
-            else if (up.contains("[WARN") || up.startsWith("WARN") || up.contains(" WARN "))
+                router.console(line);
+            }
+            else if (up.contains("[WARN") || up.startsWith("WARN") || up.contains(" WARN ")) {
                 router.warn(line);
+                router.console(line);
+            }
             else
                 router.console(line);
         }

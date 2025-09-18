@@ -3,6 +3,7 @@ package com.elitelogs.utils;
 import java.io.*;
 import java.nio.file.*;
 import java.time.*;
+import java.util.logging.Logger;
 import java.util.zip.GZIPOutputStream;
 
 public class ArchiveManager {
@@ -10,6 +11,10 @@ public class ArchiveManager {
         Path logs = new File(dataFolder, "logs").toPath();
         Path archive = new File(dataFolder, "archive").toPath();
         try {
+            if (keepDays <= 0) {
+                Logger.getLogger("EliteLogs").fine("Archive skipped because keep-days <= 0");
+                return;
+            }
             Files.createDirectories(archive);
             Instant cutoff = Instant.now().minus(Duration.ofDays(keepDays));
             Files.walk(logs).filter(Files::isRegularFile).forEach(p -> {
