@@ -33,7 +33,13 @@ public class Lang {
         try (InputStream in = plugin.getResource(res)) {
             if (in == null) return;
             out.getParentFile().mkdirs();
-            try (OutputStream os = new FileOutputStream(out)) { in.transferTo(os); }
+            try (OutputStream os = new FileOutputStream(out)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    os.write(buffer, 0, read);
+                }
+            }
         }
     }
 

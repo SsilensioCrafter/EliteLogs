@@ -15,14 +15,20 @@ public class CombatListener implements Listener {
     Location loc = e.getEntity().getLocation();
     String locStr = String.format("at %d,%d,%d", loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
 
-    if (e.getEntity() instanceof Player victim) {
+    if (e.getEntity() instanceof Player) {
+      Player victim = (Player) e.getEntity();
       String cause = e.getEntity().getLastDamageCause() != null ? e.getEntity().getLastDamageCause().getCause().name() : "UNKNOWN";
       router.combat(victim.getUniqueId(), victim.getName(), "[death] cause=" + cause + " " + locStr);
     }
 
     Player killer = e.getEntity().getKiller();
     if (killer != null) {
-      String target = e.getEntity() instanceof Player ? ((Player) e.getEntity()).getName() : e.getEntity().getType().name();
+      String target;
+      if (e.getEntity() instanceof Player) {
+        target = ((Player) e.getEntity()).getName();
+      } else {
+        target = e.getEntity().getType().name();
+      }
       String weapon = killer.getInventory().getItemInMainHand().getType().name();
       router.combat(killer.getUniqueId(), killer.getName(), "[kill] target=" + target + " weapon=" + weapon + " " + locStr);
     }

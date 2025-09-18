@@ -15,6 +15,9 @@ public class ArchiveManager {
                 Logger.getLogger("EliteLogs").fine("Archive skipped because keep-days <= 0");
                 return;
             }
+            if (!Files.exists(logs)) {
+                return;
+            }
             Files.createDirectories(archive);
             Instant cutoff = Instant.now().minus(Duration.ofDays(keepDays));
             Files.walk(logs).filter(Files::isRegularFile).forEach(p -> {
@@ -26,7 +29,11 @@ public class ArchiveManager {
                         Files.createDirectories(gz.getParent());
                         try (GZIPOutputStream g = new GZIPOutputStream(new FileOutputStream(gz.toFile()));
                              FileInputStream in = new FileInputStream(f)) {
-                            in.transferTo(g);
+                            byte[] buffer = new byte[8192];
+                            int read;
+                            while ((read = in.read(buffer)) != -1) {
+                                g.write(buffer, 0, read);
+                            }
                         }
                         // Files.delete(p); // оставить оригиналы по желанию
                     }

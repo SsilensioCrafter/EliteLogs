@@ -55,7 +55,11 @@ public class SessionManager implements LogRouter.SinkListener {
             File last = new File(folder, "last-session.txt");
             try (InputStream in = new FileInputStream(f);
                  OutputStream out = new FileOutputStream(last)) {
-                in.transferTo(out);
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, read);
+                }
             }
         } catch(Exception ignored){}
     }

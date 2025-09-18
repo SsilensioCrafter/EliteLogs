@@ -90,8 +90,11 @@ public class MetricsCollector {
         if (tpsAccessor != null) {
             try {
                 Object value = tpsAccessor.invoke(Bukkit.getServer());
-                if (value instanceof double[] arr && arr.length > 0) {
-                    return arr[0];
+                if (value instanceof double[]) {
+                    double[] arr = (double[]) value;
+                    if (arr.length > 0) {
+                        return arr[0];
+                    }
                 }
             } catch (Throwable ignored) {}
         }
