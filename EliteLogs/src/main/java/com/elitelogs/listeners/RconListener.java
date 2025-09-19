@@ -45,9 +45,14 @@ public class RconListener implements Listener {
     private String resolveAddress(CommandSender sender) {
         if (sender instanceof RemoteConsoleCommandSender) {
             try {
-                InetSocketAddress address = ((RemoteConsoleCommandSender) sender).getAddress();
-                if (address != null) {
-                    return address.getAddress().getHostAddress() + ":" + address.getPort();
+                Object socket = RemoteConsoleCommandSender.class.getMethod("getAddress").invoke(sender);
+                if (socket instanceof InetSocketAddress) {
+                    InetSocketAddress address = (InetSocketAddress) socket;
+                    if (address.getAddress() != null) {
+                        return address.getAddress().getHostAddress() + ":" + address.getPort();
+                    }
+                } else if (socket != null) {
+                    return String.valueOf(socket);
                 }
             } catch (Throwable ignored) {
             }
