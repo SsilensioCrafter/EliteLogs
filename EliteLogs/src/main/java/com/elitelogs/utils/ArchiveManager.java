@@ -33,11 +33,15 @@ public class ArchiveManager {
         public Exception getError() { return error; }
     }
 
-    public static Result archiveOldLogs(File dataFolder, int keepDays){
+    public static Result archiveOldLogs(File dataFolder, int keepDays) {
+        return archiveOldLogs(dataFolder, keepDays, false);
+    }
+
+    public static Result archiveOldLogs(File dataFolder, int keepDays, boolean includeRecent){
         Path logs = new File(dataFolder, "logs").toPath();
         Path archive = new File(dataFolder, "archive").toPath();
         try {
-            if (keepDays <= 0) {
+            if (!includeRecent && keepDays <= 0) {
                 Logger.getLogger("EliteLogs").fine("Archive skipped because keep-days <= 0");
                 return Result.skipped();
             }
@@ -45,12 +49,13 @@ public class ArchiveManager {
                 return Result.success(0, 0, 0);
             }
             Files.createDirectories(archive);
-            Instant cutoff = Instant.now().minus(Duration.ofDays(keepDays));
+            Instant cutoff = includeRecent ? null : Instant.now().minus(Duration.ofDays(keepDays));
             final int[] counters = new int[3]; // 0=candidates,1=archived,2=failed
             try (java.util.stream.Stream<Path> stream = Files.walk(logs)) {
                 stream.filter(Files::isRegularFile).forEach(p -> {
                     File f = p.toFile();
-                    if (Instant.ofEpochMilli(f.lastModified()).isBefore(cutoff)){
+                    boolean eligible = includeRecent || (cutoff != null && Instant.ofEpochMilli(f.lastModified()).isBefore(cutoff));
+                    if (eligible){
                         counters[0]++;
                         Path rel = logs.relativize(p);
                         Path gz = archive.resolve(rel.toString() + ".gz");

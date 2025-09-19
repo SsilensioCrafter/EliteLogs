@@ -46,7 +46,10 @@ public class EliteLogsPlugin extends JavaPlugin {
         this.playerTracker = new PlayerTracker(getDataFolder());
         this.logRouter.setPlayerTracker(playerTracker);
         this.consoleHook = new ConsoleHook(logRouter);
-        consoleHook.hook(); this.consoleTee = new ConsoleTee(logRouter); consoleTee.hook();
+        consoleHook.hook();
+        this.consoleTee = new ConsoleTee(logRouter);
+        consoleTee.setPreferLog4j(consoleHook.isLog4jAttached());
+        consoleTee.hook();
         DiscordAlerter.init(this);
 
         // Listeners

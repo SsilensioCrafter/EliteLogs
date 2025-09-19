@@ -40,10 +40,12 @@ public class EpicCmd implements CommandExecutor, TabCompleter {
                 }
                 sender.sendMessage(Lang.colorize(lang.get("command-metrics-usage"))); return true;
             case "rotate":
-                sender.sendMessage(Lang.colorize(lang.get("command-rotate-started")));
+                boolean force = args.length > 1 && ("force".equalsIgnoreCase(args[1]) || "all".equalsIgnoreCase(args[1]));
+                String startKey = force ? "command-rotate-started-force" : "command-rotate-started";
+                sender.sendMessage(Lang.colorize(lang.get(startKey)));
                 CommandSender rotateSender = sender;
                 Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-                    ArchiveManager.Result result = router.rotateAll();
+                    ArchiveManager.Result result = router.rotateAll(force);
                     Bukkit.getScheduler().runTask(plugin, () -> {
                         if (result.getError() != null) {
                             String msg = lang.get("command-rotate-error").replace("{message}", String.valueOf(result.getError().getMessage()));
@@ -56,6 +58,10 @@ public class EpicCmd implements CommandExecutor, TabCompleter {
                                     .replace("{failed}", String.valueOf(result.getFailed()))
                                     .replace("{candidates}", String.valueOf(result.getCandidates()));
                             rotateSender.sendMessage(Lang.colorize(msg));
+                            if (!force && result.getCandidates() == 0) {
+                                String keep = String.valueOf(plugin.getConfig().getInt("logs.keep-days", 30));
+                                rotateSender.sendMessage(Lang.colorize(lang.get("command-rotate-none").replace("{days}", keep)));
+                            }
                         }
                     });
                 });
@@ -112,6 +118,7 @@ public class EpicCmd implements CommandExecutor, TabCompleter {
                 case "logs": return java.util.Arrays.asList("toggle");
                 case "metrics": return java.util.Arrays.asList("now");
                 case "export": return java.util.Arrays.asList("today","full","last-crash");
+                case "rotate": return java.util.Arrays.asList("force");
                 case "session": return java.util.Arrays.asList("last");
             }
         }

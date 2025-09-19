@@ -131,7 +131,15 @@ public class LogRouter {
     }
 
     public ArchiveManager.Result rotateAll() {
-        return ArchiveManager.archiveOldLogs(plugin.getDataFolder(), plugin.getConfig().getInt("logs.keep-days", 30));
+        return rotateAll(false);
+    }
+
+    public ArchiveManager.Result rotateAll(boolean includeRecent) {
+        if (!includeRecent && !plugin.getConfig().getBoolean("logs.archive", true)) {
+            return ArchiveManager.Result.skipped();
+        }
+        int keep = plugin.getConfig().getInt("logs.keep-days", 30);
+        return ArchiveManager.archiveOldLogs(plugin.getDataFolder(), keep, includeRecent);
     }
 
     public String write(String category, String message) {

@@ -10,6 +10,7 @@ public class ConsoleTee {
     private final LogRouter router;
     private PrintStream oldOut;
     private PrintStream oldErr;
+    private volatile boolean preferLog4j;
 
     public ConsoleTee(LogRouter router){ this.router = router; }
 
@@ -22,6 +23,10 @@ public class ConsoleTee {
     public void unhook(){
         if (oldOut != null) System.setOut(oldOut);
         if (oldErr != null) System.setErr(oldErr);
+    }
+
+    public void setPreferLog4j(boolean prefer){
+        this.preferLog4j = prefer;
     }
 
     private class TeeOutputStream extends OutputStream {
@@ -69,8 +74,17 @@ public class ConsoleTee {
             if (line.isEmpty()) {
                 return;
             }
+            if (isErr) {
+                router.error(line);
+                router.console(line);
+                return;
+            }
+            if (preferLog4j && line.contains("] [")) {
+                router.console(line);
+                return;
+            }
             String up = line.toUpperCase(Locale.ROOT);
-            if (isErr || up.contains("[ERROR") || up.startsWith("ERROR") || up.contains(" ERROR ")) {
+            if (up.contains("[ERROR") || up.startsWith("ERROR") || up.contains(" ERROR ")) {
                 router.error(line);
                 router.console(line);
             }
