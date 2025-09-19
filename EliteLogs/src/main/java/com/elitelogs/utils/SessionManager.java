@@ -18,25 +18,51 @@ public class SessionManager implements LogRouter.SinkListener {
     private AtomicInteger errors = new AtomicInteger();
     private AtomicInteger joins = new AtomicInteger();
     private BukkitTask autosaveTask;
+    private volatile boolean running;
 
     public SessionManager(Plugin plugin, LogRouter router){
         this.plugin = plugin; this.router = router;
         router.addListener(this);
     }
 
-    public void begin(){
+    public synchronized void begin(){
+        if (running) {
+            return;
+        }
+        running = true;
         start = System.currentTimeMillis();
+        warns.set(0);
+        errors.set(0);
+        joins.set(0);
         int minutes = plugin.getConfig().getInt("sessions.autosave-minutes", 10);
-        autosaveTask = Bukkit.getScheduler().runTaskTimer(plugin, this::save, 20L*60*minutes, 20L*60*minutes);
+        if (minutes > 0) {
+            long interval = 20L * 60 * minutes;
+            autosaveTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> save(false), interval, interval);
+        }
     }
 
-    public void end(){
-        if (autosaveTask != null) autosaveTask.cancel();
-        save();
+    public synchronized void end(){
+        if (!running) {
+            return;
+        }
+        if (autosaveTask != null) {
+            autosaveTask.cancel();
+            autosaveTask = null;
+        }
+        save(true);
+        running = false;
+        start = 0L;
         DiscordAlerter.maybeSend("sessions", "Session saved");
     }
 
-    private void save(){
+    private void save(boolean finalSave){
+        long startedAt = this.start;
+        if (!finalSave && (!running || startedAt == 0L)) {
+            return;
+        }
+        if (startedAt == 0L) {
+            return;
+        }
         long dur = System.currentTimeMillis()-start;
         String date = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
         File folder = new File(plugin.getDataFolder(), "reports/sessions");
@@ -66,6 +92,9 @@ public class SessionManager implements LogRouter.SinkListener {
 
     @Override
     public void onLogged(String category, String line) {
+        if (!running) {
+            return;
+        }
         if ("warns".equals(category)) warns.incrementAndGet();
         if ("errors".equals(category)) errors.incrementAndGet();
         if ("info".equals(category) && line.contains("[join]")) joins.incrementAndGet();
@@ -80,5 +109,9 @@ public class SessionManager implements LogRouter.SinkListener {
         try (java.io.PrintWriter pw = new java.io.PrintWriter(new java.io.OutputStreamWriter(new java.io.FileOutputStream(g), java.nio.charset.StandardCharsets.UTF_8))){
             pw.println("Uptime=" + dur/1000 + "s joins=" + joins.get() + " warns=" + warns.get() + " errors=" + errors.get());
         } catch (Exception ignored){}
+    }
+
+    public boolean isRunning() {
+        return running;
     }
 }

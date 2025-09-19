@@ -95,7 +95,7 @@ public class EliteLogsPlugin extends JavaPlugin {
         if (metricsCollector != null) metricsCollector.stop(); if (eco != null) eco.stop();
         if (watchdog != null) watchdog.stop();
         if (consoleHook != null) consoleHook.unhook(); if (consoleTee != null) consoleTee.unhook();
-        if (sessionManager != null) sessionManager.end();
+        if (sessionManager != null && sessionManager.isRunning()) sessionManager.end();
         getLogger().info(Lang.colorize(lang.get("plugin-disabled")));
     }
 
