@@ -71,98 +71,102 @@ Yes, it has a config. Even your laziest admin can use it:
 ```yaml
 # ============================
 #  EliteLogs Configuration
-#  vibe-coded © 2025
+#  Version: 1.0.0
+#  (All comments are English only)
 # ============================
+# Encoding: UTF-8 (no BOM)
+# Indentation: 2 spaces (tabs are NOT allowed)
 
-# Main switches
-enabled: true     # Enable/disable EliteLogs
-debug: false      # Debug mode (prints extra info, very spammy in console)
+# --- Core settings ---
+enabled: true        # Enable/disable the plugin
+debug: false         # Enable debug mode (verbose logs)
+language: en         # Language of messages (en, ru, etc.)
 
-# Plugin language
-language: en      # Options: ru | en
-
-# ANSI color codes for messages
+# --- ANSI colors in console ---
 ansi:
-  enabled: true
-  color-ok: "§a"       # Color for success messages
-  color-warn: "§e"     # Color for warnings
-  color-fail: "§c"     # Color for errors/fails
-  reset: "§f"          # Reset color (usually white)
+  enabled: true       # Enable colored console output
+  color-ok: "§a"      # Success messages (green)
+  color-warn: "§e"    # Warnings (yellow)
+  color-fail: "§c"    # Errors (red)
+  reset: "§f"         # Reset color (white/default)
 
-# ASCII banner on server startup
+# --- Startup banner ---
 banner:
-  enabled: true
-  show-version: true
-  style: block         # Options: block | mini
-  color: default       # Options: default | green | cyan | magenta
+  enabled: true        # Show banner on server startup
+  show-version: true   # Show plugin version in banner
+  style: block         # Banner style: block / mini / none
+  color: default       # Banner color theme
 
-# Discord webhook integration
+# --- Discord webhook integration ---
 discord:
-  enabled: false
-  webhook-url: ""             # Insert your Discord webhook URL
-  rate-limit-seconds: 10      # Minimum delay between messages
-  send:
+  enabled: false                 # Enable Discord notifications
+  webhook-url: ""                # Your Discord webhook URL
+  rate-limit-seconds: 10         # Rate-limit for messages
+  send:                          # Which events to send to Discord
     errors: true
     warns: true
     sessions: true
     watchdog: true
     inspector: true
 
-# Logging system
+# --- Logs settings ---
 logs:
-  rotate: true                # Rotate logs (create new files)
-  keep-days: 30               # Keep logs for X days (-1 = forever)
-  archive: true               # Archive old logs (zip/tar)
-  split-by-player: true       # Write per-player logs in module folders
+  rotate: true                   # Rotate logs daily
+  keep-days: 30                  # Keep logs (days)
+  archive: true                  # Archive old logs
+  split-by-player: true          # Separate player logs
   legacy:
-    flat-player-files: false  # Old style: player-Name-YYYY-MM-DD.log (not recommended)
-  types:
+    flat-player-files: false     # Old flat format for player logs
+  types:                         # Enable/disable specific log types
     info: true
     warns: true
     errors: true
     chat: true
     commands: true
-    players: true             # Keep traditional logs/players/<name>/sessions
+    players: true
     combat: true
     inventory: true
     economy: true
     stats: true
     console: true
+    rcon: true
     suppressed: true
 
-# Player sessions summary
+# --- Session tracker ---
 sessions:
-  enabled: true
-  autosave-minutes: 10        # Auto-save session summary every N minutes
-  save-global: true           # Write global session reports to logs/sessions/global
-  save-players: true          # Write per-player session reports to logs/sessions/players/<uuid>
+  enabled: true                  # Enable session tracking
+  autosave-minutes: 10           # Interval for auto-saving sessions
+  save-global: true              # Save global session logs
+  save-players: true             # Save individual player sessions
 
-# Inspector — collects server info
+# --- Inspector tool ---
 inspector:
-  enabled: true
-  include-mods: true
-  include-configs: true
-  include-garbage: true
-  include-server-info: true
+  enabled: true                  # Enable inspector (system reports)
+  include-mods: true             # Include mods/plugins list
+  include-configs: true          # Include configs
+  include-garbage: true          # Include memory/GC info
+  include-server-info: true      # Include system/server info
 
-# Metrics (server health monitoring)
+# --- Metrics ---
 metrics:
-  enabled: true
-  interval-seconds: 60
+  enabled: true                  # Enable metrics collection
+  interval-seconds: 60           # Interval for metrics saving
 
-# Message suppressor / spam filter
+# --- Message suppressor ---
 suppressor:
-  enabled: true
-  mode: blacklist             # Options: blacklist | whitelist
-  spam-limit: 1000
-  filters: []                 # List of filters (regex or keywords)
+  enabled: true                  # Enable suppressor (spam filter)
+  mode: blacklist                # Mode: blacklist / whitelist
+  spam-limit: 1000               # Max messages before suppression
+  cache-max-entries: 10000       # Max cache size
+  cache-ttl-seconds: 300         # Cache time-to-live
+  filters: []                    # Add regex filters if needed
 
-# Watchdog — emergency watchdog
+# --- Watchdog ---
 watchdog:
-  enabled: true
-  tps-threshold: 5.0          # Trigger if TPS falls below this value
-  error-threshold: 50         # Trigger if errors exceed this number
-  actions:
-    run-inspector: true       # Run inspector on trigger
-    create-crash-report: true # Generate crash report
-    discord-alert: true       # Send alert to Discord
+  enabled: true                  # Enable watchdog (server health check)
+  tps-threshold: 5.0             # TPS threshold to trigger actions
+  error-threshold: 50            # Error threshold to trigger actions
+  actions:                       # Actions to perform on trigger
+    run-inspector: true          # Run inspector automatically
+    create-crash-report: true    # Generate crash report
+    discord-alert: true          # Send Discord alert
