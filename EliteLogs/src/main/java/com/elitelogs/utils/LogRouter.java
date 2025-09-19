@@ -174,13 +174,30 @@ public class LogRouter {
     }
 
     private static String playerFolder(UUID uuid, String playerName) {
-        String safeName = sanitizePlayerName(playerName);
+        PlayerTracker tracker = PlayerTrackerHolder.get();
+        if (tracker != null) {
+            return tracker.resolveFolder(uuid, playerName);
+        }
+        if (uuid == null) {
+            return "unknown";
+        }
+        String resolved = resolvePlayerName(uuid, playerName);
+        String safeName = sanitizePlayerName(resolved);
         return safeName != null ? safeName + "-" + uuid : uuid.toString();
     }
 
     public static String decoratePlayerLine(UUID uuid, String playerName, String message) {
-        String namePart = playerName != null && !playerName.isEmpty() ? playerName : "unknown";
-        return "[" + namePart + "|" + uuid + "] " + message;
+        String resolved = resolvePlayerName(uuid, playerName);
+        if (resolved == null || resolved.isEmpty()) {
+            resolved = uuid != null ? uuid.toString() : "unknown";
+        } else {
+            PlayerTracker tracker = PlayerTrackerHolder.get();
+            if (tracker != null && uuid != null) {
+                tracker.rememberName(uuid, resolved);
+            }
+        }
+        String id = uuid != null ? uuid.toString() : "unknown";
+        return "[" + resolved + "|" + id + "] " + message;
     }
 
     @Deprecated
@@ -200,6 +217,20 @@ public class LogRouter {
             return null;
         }
         return sanitized;
+    }
+
+    private static String resolvePlayerName(UUID uuid, String playerName) {
+        if (playerName != null && !playerName.isEmpty()) {
+            return playerName;
+        }
+        PlayerTracker tracker = PlayerTrackerHolder.get();
+        if (tracker != null && uuid != null) {
+            String known = tracker.getLastKnownName(uuid);
+            if (known != null && !known.isEmpty()) {
+                return known;
+            }
+        }
+        return null;
     }
 
     private static final class ConfigSnapshot {

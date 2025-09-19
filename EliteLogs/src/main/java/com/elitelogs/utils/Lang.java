@@ -5,28 +5,51 @@ import org.bukkit.plugin.Plugin;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 public class Lang {
     private final Plugin plugin;
     private YamlConfiguration lang;
+    private String activeCode = "en";
 
     public Lang(Plugin plugin){ this.plugin = plugin; }
 
     public void load(){
-        String code = plugin.getConfig().getString("language","en");
+        String raw = plugin.getConfig().getString("language","en");
+        String code = raw != null ? raw.trim().toLowerCase(Locale.ROOT) : "en";
+        if (code.isEmpty()) code = "en";
+        this.activeCode = code;
         File langDir = new File(plugin.getDataFolder(), "lang");
         if (!langDir.exists()) langDir.mkdirs();
+        ensureBundledLanguages(langDir);
+
         File file = new File(langDir, code + ".yml");
-        try {
-            if (!file.exists()) copyRes("lang_"+code+".yml", file);
-            File en = new File(langDir, "en.yml");
-            if (!en.exists()) copyRes("lang_en.yml", en);
-            File ru = new File(langDir, "ru.yml");
-            if (!ru.exists()) copyRes("lang_ru.yml", ru);
+        if (!file.exists()) {
+            this.activeCode = "en";
+            file = new File(langDir, "en.yml");
+        }
+        YamlConfiguration loaded = YamlConfiguration.loadConfiguration(file);
+        try (InputStream in = plugin.getResource("lang_en.yml")) {
+            if (in != null) {
+                YamlConfiguration defaults = YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8));
+                loaded.setDefaults(defaults);
+                loaded.options().copyDefaults(true);
+            }
         } catch (Exception ignored){}
-        if (!file.exists()) file = new File(langDir, "en.yml");
-        this.lang = YamlConfiguration.loadConfiguration(file);
+        this.lang = loaded;
+    }
+
+    private void ensureBundledLanguages(File langDir) {
+        for (String bundled : Arrays.asList("en", "ru")) {
+            File out = new File(langDir, bundled + ".yml");
+            if (!out.exists()) {
+                try {
+                    copyRes("lang_" + bundled + ".yml", out);
+                } catch (IOException ignored) {}
+            }
+        }
     }
 
     private void copyRes(String res, File out) throws IOException {
@@ -69,5 +92,9 @@ public class Lang {
     public String formatModule(String name, boolean ok){
         String key = ok ? "module-ok" : "module-fail";
         return get(key).replace("{name}", name);
+    }
+
+    public String getActiveCode() {
+        return activeCode;
     }
 }

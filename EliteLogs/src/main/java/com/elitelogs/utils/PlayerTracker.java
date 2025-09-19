@@ -25,25 +25,51 @@ public class PlayerTracker {
     }
 
     public void onLogin(Player p, String ipRegion){
-        sessionStart.put(p.getUniqueId(), System.currentTimeMillis());
-        writeBoth(p, String.format("[LOGIN] %s", ipRegion));
-        appendModuleForPlayer(p.getUniqueId(), "info", stamp(String.format("[LOGIN] %s", ipRegion)));
+        if (p == null) return;
+        UUID uuid = p.getUniqueId();
+        String name = p.getName();
+        sessionStart.put(uuid, System.currentTimeMillis());
+        String message = String.format("[LOGIN] %s", ipRegion);
+        logSession(uuid, name, message);
+        appendModuleForPlayer(uuid, "info", stamp(message));
     }
 
     public void onLogout(Player p){
-        long start = sessionStart.getOrDefault(p.getUniqueId(), System.currentTimeMillis());
+        if (p == null) return;
+        UUID uuid = p.getUniqueId();
+        String name = p.getName();
+        long start = sessionStart.getOrDefault(uuid, System.currentTimeMillis());
         long dur = System.currentTimeMillis() - start;
-        writeBoth(p, String.format("[LOGOUT] session=%d sec", dur/1000));
-        appendModuleForPlayer(p.getUniqueId(), "info", stamp(String.format("[LOGOUT] session=%d sec", dur/1000)));
+        String message = String.format("[LOGOUT] session=%d sec", dur/1000);
+        logSession(uuid, name, message);
+        appendModuleForPlayer(uuid, "info", stamp(message));
     }
 
     public void action(Player p, String text){
-        writeBoth(p, text);
-        // try to mirror to per-module player file if category can be inferred
-        String cat = detectCategory(text);
-        if (cat != null) {
-            appendModuleForPlayer(p.getUniqueId(), cat, stamp(text));
+        if (p == null) return;
+        UUID uuid = p.getUniqueId();
+        String name = p.getName();
+        recordAction(uuid, name, text);
+    }
+
+    public void action(UUID uuid, String playerName, String text) {
+        recordAction(uuid, playerName, text);
+    }
+
+    public void rememberName(UUID uuid, String playerName) {
+        if (uuid == null) return;
+        ensureFolders(uuid, playerName);
+    }
+
+    public String getLastKnownName(UUID uuid) {
+        return uuid != null ? lastKnownNames.get(uuid) : null;
+    }
+
+    public String resolveFolder(UUID uuid, String playerName) {
+        if (uuid == null) {
+            return "unknown";
         }
+        return ensureFolders(uuid, playerName);
     }
 
     private String detectCategory(String text){
@@ -59,9 +85,13 @@ public class PlayerTracker {
     }
 
     private void appendModuleForPlayer(UUID uuid, String category, String line){
+        if (uuid == null || line == null) {
+            return;
+        }
         try {
+            String folder = ensureFolders(uuid, null);
             File logsRoot = playersRoot.getParentFile(); // .../logs
-            File dir = new File(new File(new File(logsRoot, category), "players"), folderFor(uuid));
+            File dir = new File(new File(new File(logsRoot, category), "players"), folder);
             if (!dir.exists()) dir.mkdirs();
             String day = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
             File f = new File(dir, day + ".log");
@@ -74,21 +104,64 @@ public class PlayerTracker {
         return "[" + ts + "] " + msg;
     }
 
-    private void writeBoth(Player player, String line){
+    private void recordAction(UUID uuid, String playerName, String text) {
+        if (uuid == null || text == null) {
+            return;
+        }
+        logSession(uuid, playerName, text);
+        String cat = detectCategory(text);
+        if (cat != null) {
+            appendModuleForPlayer(uuid, cat, stamp(text));
+        }
+    }
+
+    private void logSession(UUID uuid, String playerName, String text) {
+        if (uuid == null || text == null) {
+            return;
+        }
         String ts = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
-        String folder = ensureFolders(player);
+        String folder = ensureFolders(uuid, playerName);
+        String display = displayName(uuid, playerName);
         File dir = new File(playersRoot, folder);
         File sessions = new File(dir, "sessions");
         String day = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
         File session = new File(sessions, day + ".log");
-        append(session, "[" + ts + "] [" + player.getName() + "|" + player.getUniqueId() + "] " + line);
+        append(session, "[" + ts + "] [" + display + "|" + uuid + "] " + text);
         // NOTE: intentionally no cumulative player.log per user's request
     }
 
-    private String ensureFolders(Player player){
-        String folder = folderFor(player.getUniqueId(), player.getName());
-        playerFolders.put(player.getUniqueId(), folder);
-        lastKnownNames.put(player.getUniqueId(), player.getName());
+    private String displayName(UUID uuid, String playerName) {
+        if (playerName != null && !playerName.isEmpty()) {
+            return playerName;
+        }
+        String known = uuid != null ? lastKnownNames.get(uuid) : null;
+        if (known != null && !known.isEmpty()) {
+            return known;
+        }
+        return uuid != null ? uuid.toString() : "unknown";
+    }
+
+    private String ensureFolders(UUID uuid, String playerName){
+        if (uuid == null) {
+            return "unknown";
+        }
+        if (playerName != null && !playerName.isEmpty()) {
+            lastKnownNames.put(uuid, playerName);
+        }
+        String current = playerFolders.get(uuid);
+        String desired = folderFor(uuid, playerName);
+        if (current != null && !current.equals(desired)) {
+            File oldDir = new File(playersRoot, current);
+            File newDir = new File(playersRoot, desired);
+            if (!oldDir.equals(newDir) && oldDir.exists()) {
+                // best effort rename so old data follows the player rename
+                // ignore failures silently to avoid impacting logging
+                //noinspection ResultOfMethodCallIgnored
+                oldDir.renameTo(newDir);
+            }
+        }
+        String folder = desired;
+        playerFolders.put(uuid, folder);
         File dir = new File(playersRoot, folder);
         if (!dir.exists()) dir.mkdirs();
         File sessions = new File(dir, "sessions");
@@ -97,17 +170,19 @@ public class PlayerTracker {
     }
 
     private String folderFor(UUID uuid){
-        String cached = playerFolders.get(uuid);
-        if (cached != null) return cached;
-        String name = lastKnownNames.get(uuid);
-        String folder = folderFor(uuid, name);
-        playerFolders.put(uuid, folder);
-        return folder;
+        return ensureFolders(uuid, null);
     }
 
     private String folderFor(UUID uuid, String playerName){
-        String sanitized = LogRouter.sanitizePlayerName(playerName);
-        return sanitized != null ? sanitized + "-" + uuid : uuid.toString();
+        String effective = playerName;
+        if ((effective == null || effective.isEmpty()) && uuid != null) {
+            String known = lastKnownNames.get(uuid);
+            if (known != null && !known.isEmpty()) {
+                effective = known;
+            }
+        }
+        String sanitized = LogRouter.sanitizePlayerName(effective);
+        return sanitized != null ? sanitized + "-" + uuid : uuid != null ? uuid.toString() : "unknown";
     }
 
     private void append(File f, String line){

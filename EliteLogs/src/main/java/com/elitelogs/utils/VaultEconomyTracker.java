@@ -3,6 +3,10 @@ package com.elitelogs.utils;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.plugin.EventExecutor;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -24,6 +28,8 @@ public class VaultEconomyTracker {
     private boolean warnedNoAccessor;
     private boolean announcedHook;
     private BukkitTask task;
+    private Listener transactionListener;
+    private boolean transactionHookAttempted;
 
     private interface BalanceAccessor {
         double get(Player player) throws Exception;
@@ -68,10 +74,15 @@ public class VaultEconomyTracker {
         task = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 20L, 20L*poll);
         Bukkit.getScheduler().runTask(plugin, this::tick);
         router.write("economy", "[vault] tracker scheduled, interval=" + poll + "s");
+        hookTransactionEvents();
     }
 
     public void stop(){
         if (task != null) task.cancel();
+        if (transactionListener != null) {
+            HandlerList.unregisterAll(transactionListener);
+            transactionListener = null;
+        }
     }
 
     private void tick(){
@@ -194,5 +205,105 @@ public class VaultEconomyTracker {
         } catch (Throwable ignored) {
             return "";
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void hookTransactionEvents() {
+        if (transactionListener != null || transactionHookAttempted) {
+            return;
+        }
+        transactionHookAttempted = true;
+        try {
+            Class<?> eventClass = Class.forName("net.milkbowl.vault.event.EconomyTransactionEvent");
+            final Method getPlayer = eventClass.getMethod("getPlayer");
+            final Method getAmount = eventClass.getMethod("getAmount");
+            final Method getBalance = eventClass.getMethod("getBalance");
+            final Method getType = eventClass.getMethod("getTransactionType");
+            Method wasSuccessful = null;
+            try { wasSuccessful = eventClass.getMethod("wasSuccessful"); } catch (NoSuchMethodException ignored) {}
+            Method getCurrency = null;
+            try { getCurrency = eventClass.getMethod("getCurrency"); } catch (NoSuchMethodException ignored) {}
+            Method getWorld = null;
+            try { getWorld = eventClass.getMethod("getWorld"); } catch (NoSuchMethodException ignored) {}
+
+            Method finalWasSuccessful = wasSuccessful;
+            Method finalGetCurrency = getCurrency;
+            Method finalGetWorld = getWorld;
+            transactionListener = new Listener() {};
+            EventExecutor executor = (listener, event) -> {
+                if (!eventClass.isInstance(event)) {
+                    return;
+                }
+                try {
+                    if (finalWasSuccessful != null) {
+                        Object successObj = finalWasSuccessful.invoke(event);
+                        if (successObj instanceof Boolean && !((Boolean) successObj)) {
+                            return;
+                        }
+                    }
+                    Object playerObj = getPlayer.invoke(event);
+                    UUID uuid = null;
+                    String name = null;
+                    if (playerObj instanceof Player) {
+                        Player player = (Player) playerObj;
+                        uuid = player.getUniqueId();
+                        name = player.getName();
+                    } else if (playerObj instanceof OfflinePlayer) {
+                        OfflinePlayer offline = (OfflinePlayer) playerObj;
+                        uuid = offline.getUniqueId();
+                        name = offline.getName();
+                    } else if (playerObj instanceof UUID) {
+                        uuid = (UUID) playerObj;
+                    } else if (playerObj instanceof String) {
+                        name = (String) playerObj;
+                    }
+
+                    double amount = ((Number) getAmount.invoke(event)).doubleValue();
+                    double balance = ((Number) getBalance.invoke(event)).doubleValue();
+                    Object typeObj = getType.invoke(event);
+                    String type = typeObj != null ? typeObj.toString() : "UNKNOWN";
+                    String currency = finalGetCurrency != null ? String.valueOf(finalGetCurrency.invoke(event)) : "";
+                    if (currency == null) currency = "";
+                    String world = finalGetWorld != null ? String.valueOf(finalGetWorld.invoke(event)) : "";
+                    if (world == null) world = "";
+
+                    StringBuilder detail = new StringBuilder("[vault-event] ");
+                    detail.append(type.toLowerCase(Locale.ROOT));
+                    if (!currency.isEmpty()) {
+                        detail.append(' ').append(currency);
+                    }
+                    detail.append(String.format(Locale.US, " %.2f", amount));
+                    detail.append(String.format(Locale.US, " -> %.2f", balance));
+                    if (!world.isEmpty()) {
+                        detail.append(" world=").append(world);
+                    }
+                    String finalLine = detail.toString();
+
+                    if (uuid != null) {
+                        router.economy(uuid, name, finalLine);
+                        if (PlayerTrackerHolder.get() != null) {
+                            PlayerTrackerHolder.get().action(uuid, name, finalLine);
+                        }
+                    } else if (name != null && !name.isEmpty()) {
+                        router.write("economy", finalLine + " player=" + name);
+                    } else {
+                        router.write("economy", finalLine);
+                    }
+                } catch (Throwable t) {
+                    router.write("economy", "[vault] transaction event error: " + safeError(t));
+                }
+            };
+            Bukkit.getPluginManager().registerEvent((Class<? extends org.bukkit.event.Event>) eventClass, transactionListener,
+                    EventPriority.MONITOR, executor, plugin, true);
+            router.write("economy", "[vault] transaction events hooked");
+        } catch (ClassNotFoundException ignored) {
+            // Vault does not expose transaction events
+        } catch (Throwable t) {
+            router.write("economy", "[vault] failed to hook transaction events: " + safeError(t));
+        }
+    }
+
+    private String safeError(Throwable t) {
+        return t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName();
     }
 }
