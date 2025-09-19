@@ -11,6 +11,9 @@ import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class DiscordAlerter {
@@ -20,6 +23,14 @@ public class DiscordAlerter {
     private static int rateLimitSeconds = 10;
     private static final Map<String, Long> lastSend = new ConcurrentHashMap<>();
     private static volatile Map<String, Boolean> channelPermissions = Collections.emptyMap();
+    private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor(new ThreadFactory() {
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r, "EliteLogs-Discord");
+            t.setDaemon(true);
+            return t;
+        }
+    });
 
     public static void init(Plugin pl){
         plugin = pl;
@@ -48,8 +59,12 @@ public class DiscordAlerter {
             return;
         }
 
+        final String payload = content.length() > 1800 ? content.substring(0, 1800) : content;
+        EXECUTOR.submit(() -> sendNow(payload));
+    }
+
+    private static void sendNow(String content) {
         try {
-            if (content.length() > 1800) content = content.substring(0, 1800);
             String json = "{\"content\":\"" + escape(content) + "\"}";
             URL url = new URL(webhook);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();

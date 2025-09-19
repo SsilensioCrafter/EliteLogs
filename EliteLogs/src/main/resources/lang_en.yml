@@ -8,11 +8,13 @@ help-header: "&8&l┏━━━━━━━━ &a&lElite&f&lLogs &7&l— &f&lComm
 help-footer: "&8&l┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
 help-commands:
   - "/elogs help       → show this help"
+  - "/elogs reload     → reload config"
   - "/elogs inspector  → run inspector"
   - "/elogs metrics    → show metrics"
   - "/elogs export     → export logs"
   - "/elogs rotate     → archive old logs"
   - "/elogs logs       → log categories"
+  - "/elogs version    → show plugin version"
 command-reload: "&a[EliteLogs]&f Configuration and language reloaded."
 command-metrics-now: "&eTPS: &f{tps}"
 command-metrics-usage: "&7Use: /elogs metrics now"

@@ -57,6 +57,7 @@ public class EliteLogsPlugin extends JavaPlugin {
         if (getConfig().getBoolean("logs.types.combat", true)) Bukkit.getPluginManager().registerEvents(new CombatListener(logRouter), this);
         if (getConfig().getBoolean("logs.types.inventory", true)) Bukkit.getPluginManager().registerEvents(new InventoryListener(logRouter, playerTracker), this);
         if (getConfig().getBoolean("logs.types.economy", true)) Bukkit.getPluginManager().registerEvents(new EconomyListener(), this);
+        if (getConfig().getBoolean("logs.types.rcon", true)) Bukkit.getPluginManager().registerEvents(new RconListener(logRouter), this);
 
         // Metrics + Watchdog + Economy
         this.metricsCollector = new MetricsCollector(this, logRouter); this.eco = new VaultEconomyTracker(this, logRouter, playerTracker);
@@ -112,14 +113,18 @@ public class EliteLogsPlugin extends JavaPlugin {
     }
 
     private void createFolderTree() {
+        File data = getDataFolder();
+        if (!data.exists()) {
+            data.mkdirs();
+        }
         List<String> folders = Arrays.asList(
                 "logs/info","logs/warns","logs/errors","logs/chat","logs/commands","logs/players",
-                "logs/combat","logs/inventory","logs/economy","logs/stats","logs/console","logs/suppressed",
+                "logs/combat","logs/inventory","logs/economy","logs/stats","logs/console","logs/rcon","logs/suppressed",
                 "reports/sessions","reports/inspector",
                 "archive","exports","lang"
         );
         for (String path : folders) {
-            File f = new File(getDataFolder(), path);
+            File f = new File(data, path);
             if (!f.exists()) f.mkdirs();
         }
     }

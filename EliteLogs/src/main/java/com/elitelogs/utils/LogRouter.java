@@ -93,6 +93,10 @@ public class LogRouter {
         writeWithPlayer("inventory", uuid, playerName, message);
     }
 
+    public void rcon(String message) {
+        write("rcon", message);
+    }
+
     public void console(String message) {
         write("console", message);
     }
