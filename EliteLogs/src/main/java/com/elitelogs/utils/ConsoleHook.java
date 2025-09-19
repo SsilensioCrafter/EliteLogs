@@ -113,7 +113,7 @@ public class ConsoleHook {
         if (log4jContext != null && log4jRoot != null && log4jAppender != null) {
             try {
                 Configuration configuration = log4jContext.getConfiguration();
-                configuration.removeAppender(log4jAppender.getName());
+                configuration.getAppenders().remove(log4jAppender.getName());
                 log4jRoot.removeAppender(log4jAppender.getName());
                 log4jContext.updateLoggers();
             } catch (Throwable ignored) {
