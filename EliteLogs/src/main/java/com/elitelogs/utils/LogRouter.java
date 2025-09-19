@@ -16,6 +16,10 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 public class LogRouter {
     @Deprecated public static final String GLOBAL_PREFIX = "global-";
@@ -27,6 +31,7 @@ public class LogRouter {
     private final Suppressor suppressor;
     private final Map<String, FileLogger> loggers = new ConcurrentHashMap<>();
     private final List<SinkListener> listeners = new CopyOnWriteArrayList<>();
+    private final ExecutorService writeExecutor;
     private final ZoneId zoneId = ZoneId.systemDefault();
     private final DateTimeFormatter dayFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ROOT);
     private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT);
@@ -36,6 +41,14 @@ public class LogRouter {
     public LogRouter(Plugin plugin) {
         this.plugin = plugin;
         this.suppressor = new Suppressor(plugin);
+        this.writeExecutor = Executors.newSingleThreadExecutor(new ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread thread = new Thread(r, "EliteLogs-Writer");
+                thread.setDaemon(true);
+                return thread;
+            }
+        });
         reloadConfig();
     }
 
@@ -46,6 +59,18 @@ public class LogRouter {
 
     public void setPlayerTracker(PlayerTracker tracker) {
         this.playerTracker = tracker;
+    }
+
+    public void shutdown() {
+        writeExecutor.shutdown();
+        try {
+            if (!writeExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                writeExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            writeExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     public void addListener(SinkListener listener) {
@@ -143,7 +168,7 @@ public class LogRouter {
     private void append(String category, String stampedLine) {
         String file = "global-" + today() + ".log";
         FileLogger fileLogger = getLogger(category);
-        fileLogger.append(file, stampedLine);
+        writeExecutor.execute(() -> fileLogger.append(file, stampedLine));
     }
 
     private void appendPlayer(String category, UUID uuid, String playerName, String stampedLine) {
@@ -153,7 +178,8 @@ public class LogRouter {
         }
         String folder = playerFolder(uuid, playerName);
         FileLogger playerLogger = getLogger(category + "/players/" + folder);
-        playerLogger.append(today() + ".log", stampedLine);
+        String file = today() + ".log";
+        writeExecutor.execute(() -> playerLogger.append(file, stampedLine));
     }
 
     private FileLogger getLogger(String category) {
