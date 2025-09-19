@@ -24,7 +24,7 @@ public class ConsoleHook {
                     formatted = formatted + System.lineSeparator() + sw;
                 }
                 String line = r.getLevel().getName() + ": " + formatted;
-                boolean consoleAlreadyLogged = false;
+                boolean logToConsole = true;
                 if (r.getLevel().intValue() >= Level.SEVERE.intValue()) {
                     router.error(line);
                 } else if (r.getLevel().intValue() >= Level.WARNING.intValue()) {
@@ -37,10 +37,10 @@ public class ConsoleHook {
                         router.warn(line);
                     } else {
                         router.console(line);
-                        consoleAlreadyLogged = true;
+                        logToConsole = false;
                     }
                 }
-                if (!consoleAlreadyLogged) {
+                if (logToConsole) {
                     router.console(line);
                 }
             }

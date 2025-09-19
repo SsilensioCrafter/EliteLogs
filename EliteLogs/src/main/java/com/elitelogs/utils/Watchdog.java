@@ -43,7 +43,9 @@ public class Watchdog implements LogRouter.SinkListener {
         int errorCount = errorsWindow.getAndSet(0);
 
         if (tps < tpsThreshold || errorCount > errorThreshold) {
-            router.warn("[Watchdog] Triggered: TPS=" + tps + " errors/5s=" + errorCount);
+            String triggerLine = "[Watchdog] Triggered: TPS=" + tps + " errors/5s=" + errorCount;
+            router.warn(triggerLine);
+            router.console(triggerLine);
 
             if (plugin.getConfig().getBoolean("watchdog.actions.run-inspector", true)) {
                 // можно дернуть инспектор командой или API - здесь оставлен хук
@@ -65,7 +67,9 @@ public class Watchdog implements LogRouter.SinkListener {
                             router.warn("[Watchdog] Failed to rename crash report to " + crashTarget.getName() + ": " + moveError.getMessage());
                         }
                     }
-                    router.warn("[Watchdog] Crash report prepared: " + finalFile.getAbsolutePath());
+                    String crashLine = "[Watchdog] Crash report prepared: " + finalFile.getAbsolutePath();
+                    router.warn(crashLine);
+                    router.console(crashLine);
                     if (plugin.getConfig().getBoolean("watchdog.actions.discord-alert", true)) {
                         DiscordAlerter.maybeSend("watchdog", "Crash report prepared: " + finalFile.getName());
                     }

@@ -3,6 +3,7 @@ package com.elitelogs.handlers;
 import com.elitelogs.EliteLogsPlugin;
 import com.elitelogs.inspector.Inspector;
 import com.elitelogs.utils.*;
+import org.bukkit.Bukkit;
 import org.bukkit.command.*;
 import java.io.File;
 import java.util.*;
@@ -39,7 +40,26 @@ public class EpicCmd implements CommandExecutor, TabCompleter {
                 }
                 sender.sendMessage(Lang.colorize(lang.get("command-metrics-usage"))); return true;
             case "rotate":
-                router.rotateAll(); sender.sendMessage(Lang.colorize(lang.get("command-rotate-started"))); return true;
+                sender.sendMessage(Lang.colorize(lang.get("command-rotate-started")));
+                CommandSender rotateSender = sender;
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                    ArchiveManager.Result result = router.rotateAll();
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        if (result.getError() != null) {
+                            String msg = lang.get("command-rotate-error").replace("{message}", String.valueOf(result.getError().getMessage()));
+                            rotateSender.sendMessage(Lang.colorize(msg));
+                        } else if (result.isSkipped()) {
+                            rotateSender.sendMessage(Lang.colorize(lang.get("command-rotate-skipped")));
+                        } else {
+                            String msg = lang.get("command-rotate-finished")
+                                    .replace("{archived}", String.valueOf(result.getArchived()))
+                                    .replace("{failed}", String.valueOf(result.getFailed()))
+                                    .replace("{candidates}", String.valueOf(result.getCandidates()));
+                            rotateSender.sendMessage(Lang.colorize(msg));
+                        }
+                    });
+                });
+                return true;
             case "export":
                 String mode = (args.length > 1) ? args[1].toLowerCase(java.util.Locale.ROOT) : "today";
                 try {

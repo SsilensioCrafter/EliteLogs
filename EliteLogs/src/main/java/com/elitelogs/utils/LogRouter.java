@@ -130,8 +130,8 @@ public class LogRouter {
         writeWithPlayer("players", uuid, playerName, message);
     }
 
-    public void rotateAll() {
-        ArchiveManager.archiveOldLogs(plugin.getDataFolder(), plugin.getConfig().getInt("logs.keep-days", 30));
+    public ArchiveManager.Result rotateAll() {
+        return ArchiveManager.archiveOldLogs(plugin.getDataFolder(), plugin.getConfig().getInt("logs.keep-days", 30));
     }
 
     public String write(String category, String message) {
@@ -177,7 +177,8 @@ public class LogRouter {
             return;
         }
         String folder = playerFolder(uuid, playerName);
-        FileLogger playerLogger = getLogger(category + "/players/" + folder);
+        String loggerKey = "players".equals(category) ? category + "/" + folder : category + "/players/" + folder;
+        FileLogger playerLogger = getLogger(loggerKey);
         String file = today() + ".log";
         writeExecutor.execute(() -> playerLogger.append(file, stampedLine));
     }
