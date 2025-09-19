@@ -6,6 +6,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import java.util.stream.Stream;
 
 public class Exporter {
     public static File exportToday(File dataFolder) throws IOException {
@@ -31,17 +32,27 @@ public class Exporter {
     }
     private static void zipPaths(File out, Path base, Path... toZip) throws IOException {
         out.getParentFile().mkdirs();
+        Path outputPath = out.toPath().toAbsolutePath().normalize();
+        Path basePath = base.toAbsolutePath().normalize();
         try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(out))) {
             for (Path p : toZip) {
-                if (!Files.exists(p)) continue;
-                Files.walk(p).filter(Files::isRegularFile).forEach(f -> {
-                    try {
-                        ZipEntry e = new ZipEntry(base.relativize(f).toString().replace("\\","/"));
-                        zos.putNextEntry(e);
-                        Files.copy(f, zos);
-                        zos.closeEntry();
-                    } catch (Exception ignored){}
-                });
+                if (p == null || !Files.exists(p)) continue;
+                Path root = p.toAbsolutePath().normalize();
+                try (Stream<Path> stream = Files.walk(root)) {
+                    stream.filter(Files::isRegularFile).forEach(f -> {
+                        Path filePath = f.toAbsolutePath().normalize();
+                        if (filePath.equals(outputPath)) {
+                            return;
+                        }
+                        try {
+                            Path relative = basePath.relativize(filePath);
+                            ZipEntry e = new ZipEntry(relative.toString().replace("\\","/"));
+                            zos.putNextEntry(e);
+                            Files.copy(filePath, zos);
+                            zos.closeEntry();
+                        } catch (Exception ignored){}
+                    });
+                }
             }
         }
     }

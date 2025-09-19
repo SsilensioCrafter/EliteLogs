@@ -2,6 +2,7 @@ package com.elitelogs.inspector;
 
 import com.elitelogs.EliteLogsPlugin;
 import com.elitelogs.utils.DiscordAlerter;
+import com.elitelogs.utils.Lang;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
 
@@ -18,9 +19,11 @@ public class Inspector {
     private final File serverRoot;
     private final File configDir;
     private final File serverConfigDir;
+    private final Lang lang;
 
-    public Inspector(EliteLogsPlugin plugin){
+    public Inspector(EliteLogsPlugin plugin, Lang lang){
         this.plugin = plugin;
+        this.lang = lang;
         this.outDir = new File(plugin.getDataFolder(), "reports/inspector");
         this.serverRoot = plugin.getServer().getWorldContainer();
         this.configDir = new File(serverRoot, "config");
@@ -38,19 +41,24 @@ public class Inspector {
     }
 
     private void writePlugins(PrintWriter pw){
-        pw.println("=== Plugins ===");
+        pw.println(t("inspector.plugins-header"));
         Plugin[] ps = Bukkit.getPluginManager().getPlugins();
         for (Plugin p : ps){
             String ver = (p.getDescription()!=null && p.getDescription().getVersion()!=null && !p.getDescription().getVersion().isEmpty())
-                    ? p.getDescription().getVersion() : "unknown";
-            pw.printf(Locale.ROOT, "%s\t%s\t%s%n", p.getName(), p.isEnabled() ? "ENABLED" : "DISABLED", ver);
+                    ? p.getDescription().getVersion() : t("inspector.plugins-version-unknown");
+            String state = p.isEnabled() ? t("inspector.plugins-enabled") : t("inspector.plugins-disabled");
+            String line = t("inspector.plugins-format")
+                    .replace("{name}", p.getName())
+                    .replace("{state}", state)
+                    .replace("{version}", ver);
+            pw.println(line);
         }
         pw.println();
     }
 
     private void writeMods(PrintWriter pw){
         if (!plugin.getConfig().getBoolean("inspector.include-mods", true)) return;
-        pw.println("=== Mods ===");
+        pw.println(t("inspector.mods-header"));
         try {
             Class<?> modList = Class.forName("net.minecraftforge.fml.ModList");
             Object inst = modList.getMethod("get").invoke(null);
@@ -61,7 +69,7 @@ public class Inspector {
                 pw.println(id + "\t" + ver);
             }
         } catch (Throwable t){
-            pw.println("Forge/Arclight not detected or inaccessible.");
+            pw.println(t("inspector.mods-missing"));
         }
         pw.println();
     }
@@ -69,7 +77,7 @@ public class Inspector {
     private void writeConfigs(PrintWriter pw){
         if (!plugin.getConfig().getBoolean("inspector.include-configs", true)) return;
         List<String> okExt = Arrays.asList(".yml",".yaml",".json",".toml",".cfg");
-        pw.println("=== Configs ===");
+        pw.println(t("inspector.configs-header"));
         for (File dir : new File[]{configDir, serverConfigDir}){
             if (dir == null || !dir.exists()) continue;
             try {
@@ -78,14 +86,20 @@ public class Inspector {
                     String rel = dir.toPath().relativize(p).toString().replace("\\","/");
                     String name = cf.getName().toLowerCase(Locale.ROOT);
                     String ext = name.contains(".") ? name.substring(name.lastIndexOf(".")) : "";
-                    String status = "OK";
-                    if (cf.length() == 0) status = "EMPTY";
-                    else if (!okExt.contains(ext)) status = "NOT NEEDED";
+                    String status = t("inspector.configs-status-ok");
+                    if (cf.length() == 0) status = t("inspector.configs-status-empty");
+                    else if (!okExt.contains(ext)) status = t("inspector.configs-status-not-needed");
                     String base = name.replace(ext,"");
                     boolean pluginExists = Arrays.stream(Bukkit.getPluginManager().getPlugins())
                             .anyMatch(pl -> pl.getName().equalsIgnoreCase(base));
-                    if (!pluginExists && okExt.contains(ext)) status = "ORPHANED";
-                    try { pw.printf("[%s] %s: %s%n", dir.getName(), rel, status); } catch(Exception ignored){}
+                    if (!pluginExists && okExt.contains(ext)) status = t("inspector.configs-status-orphaned");
+                    try {
+                        String line = t("inspector.configs-format")
+                                .replace("{folder}", dir.getName())
+                                .replace("{path}", rel)
+                                .replace("{status}", status);
+                        pw.println(line);
+                    } catch(Exception ignored){}
                 });
             } catch (Exception ignored){}
         }
@@ -94,7 +108,7 @@ public class Inspector {
 
     private void writeGarbage(PrintWriter pw){
         if (!plugin.getConfig().getBoolean("inspector.include-garbage", true)) return;
-        pw.println("=== Garbage ===");
+        pw.println(t("inspector.garbage-header"));
         scanGarbage(pw, new File(serverRoot, "plugins"), ".jar");
         scanGarbage(pw, new File(serverRoot, "mods"), ".jar");
         scanGarbage(pw, configDir, ".yml",".yaml",".json",".toml",".cfg");
@@ -103,7 +117,7 @@ public class Inspector {
         if (files != null) for (File x : files){
             String n = x.getName().toLowerCase(Locale.ROOT);
             if (n.endsWith(".zip") || n.endsWith(".rar") || n.endsWith(".old") || n.endsWith(".log")){
-                pw.println("[root] " + x.getName());
+                pw.println(t("inspector.garbage-root").replace("{name}", x.getName()));
             }
         }
         pw.println();
@@ -117,18 +131,24 @@ public class Inspector {
             if (f.isDirectory()) continue;
             String n = f.getName().toLowerCase(Locale.ROOT);
             String ext = n.contains(".") ? n.substring(n.lastIndexOf(".")) : "";
-            if (!ok.contains(ext)) pw.println("[" + dir.getName() + "] " + f.getName());
+            if (!ok.contains(ext)) pw.println(t("inspector.garbage-entry")
+                    .replace("{folder}", dir.getName())
+                    .replace("{file}", f.getName()));
         }
     }
 
     private void writeServerInfo(PrintWriter pw){
         if (!plugin.getConfig().getBoolean("inspector.include-server-info", true)) return;
-        pw.println("=== Server ===");
-        pw.println("Bukkit: " + Bukkit.getVersion());
-        pw.println("MC: " + Bukkit.getBukkitVersion());
-        pw.println("Java: " + System.getProperty("java.version"));
-        pw.println("OS: " + System.getProperty("os.name") + " " + System.getProperty("os.version"));
-        pw.println("CPU: " + ManagementFactory.getOperatingSystemMXBean().getAvailableProcessors() + " cores");
+        pw.println(t("inspector.server-header"));
+        pw.println(t("inspector.server-bukkit").replace("{value}", Bukkit.getVersion()));
+        pw.println(t("inspector.server-mc").replace("{value}", Bukkit.getBukkitVersion()));
+        pw.println(t("inspector.server-java").replace("{value}", System.getProperty("java.version")));
+        pw.println(t("inspector.server-os").replace("{value}", System.getProperty("os.name") + " " + System.getProperty("os.version")));
+        pw.println(t("inspector.server-cpu").replace("{value}", String.valueOf(ManagementFactory.getOperatingSystemMXBean().getAvailableProcessors())));
         pw.println();
+    }
+
+    private String t(String key){
+        return lang.get(key);
     }
 }

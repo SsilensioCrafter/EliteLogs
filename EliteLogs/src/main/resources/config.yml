@@ -52,6 +52,7 @@ logs:
     economy: true
     stats: true
     console: true
+    rcon: true
     suppressed: true
 
 sessions:
@@ -75,6 +76,8 @@ suppressor:
   enabled: true
   mode: blacklist
   spam-limit: 1000
+  cache-max-entries: 10000
+  cache-ttl-seconds: 300
   filters: []
 
 watchdog:

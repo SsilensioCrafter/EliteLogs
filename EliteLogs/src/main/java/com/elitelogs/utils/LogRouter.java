@@ -1,102 +1,323 @@
 package com.elitelogs.utils;
 
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.Plugin;
+
 import java.io.File;
-import java.text.SimpleDateFormat;
-import java.util.*;
+import java.text.Normalizer;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 public class LogRouter {
-    private final Plugin plugin;
-    private final Suppressor suppressor;
-    private final SimpleDateFormat dayFmt = new SimpleDateFormat("yyyy-MM-dd");
-    private final Map<String, FileLogger> loggers = new HashMap<>();
+    @Deprecated public static final String GLOBAL_PREFIX = "global-";
+    @Deprecated public static final String PLAYER_PREFIX = "players/";
 
     public interface SinkListener { void onLogged(String category, String line); }
+
+    private final Plugin plugin;
+    private final Suppressor suppressor;
+    private final Map<String, FileLogger> loggers = new ConcurrentHashMap<>();
     private final List<SinkListener> listeners = new CopyOnWriteArrayList<>();
+    private final ExecutorService writeExecutor;
+    private final ZoneId zoneId = ZoneId.systemDefault();
+    private final DateTimeFormatter dayFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ROOT);
+    private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT);
+    private volatile ConfigSnapshot configSnapshot;
+    private volatile PlayerTracker playerTracker;
 
-    public LogRouter(Plugin plugin){ this.plugin=plugin; this.suppressor=new Suppressor(plugin); }
-    public void addListener(SinkListener l){ if (l!=null) listeners.add(l); }
-    public void setListener(SinkListener l){ listeners.clear(); if (l!=null) listeners.add(l); }
-
-    private FileLogger logger(String category){
-        return loggers.computeIfAbsent(category, c -> new FileLogger(new File(plugin.getDataFolder(), "logs/"+c)));
-    }
-    private String today(){ return dayFmt.format(new Date()); }
-    private String stamp(String m){ return "[" + new SimpleDateFormat("HH:mm:ss").format(new Date()) + "] " + m; }
-
-    public void info(String msg){ write("info", msg); }
-    public void warn(String msg){ write("warns", msg); }
-    public void error(String msg){ write("errors", msg); }
-    public void chat(String msg){ write("chat", msg); }
-    public void command(String msg){ write("commands", msg); }
-    public void console(String msg){ write("console", msg); }
-
-    public void player(String player, String msg){
-        FileLogger pl = new FileLogger(new File(plugin.getDataFolder(), "logs/players"));
-        pl.append("player-"+player+"-"+today()+".log", stamp(msg));
-        notifyListeners("players", msg);
+    public LogRouter(Plugin plugin) {
+        this.plugin = plugin;
+        this.suppressor = new Suppressor(plugin);
+        this.writeExecutor = Executors.newSingleThreadExecutor(new ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread thread = new Thread(r, "EliteLogs-Writer");
+                thread.setDaemon(true);
+                return thread;
+            }
+        });
+        reloadConfig();
     }
 
-    public void write(String category, String msg){
-        Suppressor.Result r = suppressor.filter(msg);
-        if (r.drop) return;
-        String file = "global-" + today() + ".log";
-        logger(category).append(file, stamp(r.line));
-        if ("errors".equals(category)) DiscordAlerter.maybeSend("errors", r.line);
-        if ("warns".equals(category))  DiscordAlerter.maybeSend("warns",  r.line);
-        if (r.summary != null) {
-            logger("suppressed").append("suppressed-" + today() + ".log", stamp(r.summary));
+    public void reloadConfig() {
+        this.suppressor.reload();
+        this.configSnapshot = ConfigSnapshot.from(plugin);
+    }
+
+    public void setPlayerTracker(PlayerTracker tracker) {
+        this.playerTracker = tracker;
+    }
+
+    public void shutdown() {
+        writeExecutor.shutdown();
+        try {
+            if (!writeExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                writeExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            writeExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
         }
-        notifyListeners(category, r.line);
     }
 
-    private void notifyListeners(String category, String line){
-        for (SinkListener l : listeners) try { l.onLogged(category, line); } catch (Throwable ignored){}
+    public void addListener(SinkListener listener) {
+        if (listener != null) listeners.add(listener);
     }
 
-    public void rotateAll(){
-        ArchiveManager.archiveOldLogs(plugin.getDataFolder(), plugin.getConfig().getInt("logs.keep-days", 30));
+    public void setListener(SinkListener listener) {
+        listeners.clear();
+        addListener(listener);
     }
 
+    public void info(String message) {
+        write("info", message);
+    }
 
-    // === PATCH: per-player aware logging ===
-    private void writeForPlayer(String category, java.util.UUID uuid, String msg) {
-        if (!plugin.getConfig().getBoolean("logs.split-by-player", true)) return;
-        java.io.File base = new java.io.File(plugin.getDataFolder(), "logs/" + category + "/players/" + uuid);
-        base.mkdirs();
+    public void info(UUID uuid, String playerName, String message) {
+        writeWithPlayer("info", uuid, playerName, message);
+    }
+
+    public void warn(String message) {
+        write("warns", message);
+    }
+
+    public void error(String message) {
+        write("errors", message);
+    }
+
+    public void chat(UUID uuid, String playerName, String message) {
+        writeWithPlayer("chat", uuid, playerName, "[chat] " + message);
+    }
+
+    public void command(UUID uuid, String playerName, String commandLine) {
+        writeWithPlayer("commands", uuid, playerName, "[cmd] " + commandLine);
+    }
+
+    public void economy(UUID uuid, String playerName, String message) {
+        writeWithPlayer("economy", uuid, playerName, message);
+    }
+
+    public void combat(UUID uuid, String playerName, String message) {
+        writeWithPlayer("combat", uuid, playerName, message);
+    }
+
+    public void inventory(UUID uuid, String playerName, String message) {
+        writeWithPlayer("inventory", uuid, playerName, message);
+    }
+
+    public void rcon(String message) {
+        write("rcon", message);
+    }
+
+    public void console(String message) {
+        write("console", message);
+    }
+
+    public void player(UUID uuid, String playerName, String message) {
+        writeWithPlayer("players", uuid, playerName, message);
+    }
+
+    public ArchiveManager.Result rotateAll() {
+        return rotateAll(false);
+    }
+
+    public ArchiveManager.Result rotateAll(boolean includeRecent) {
+        if (!includeRecent && !plugin.getConfig().getBoolean("logs.archive", true)) {
+            return ArchiveManager.Result.skipped();
+        }
+        int keep = plugin.getConfig().getInt("logs.keep-days", 30);
+        return ArchiveManager.archiveOldLogs(plugin.getDataFolder(), keep, includeRecent);
+    }
+
+    public String write(String category, String message) {
+        ConfigSnapshot snapshot = this.configSnapshot;
+        if (snapshot == null || !snapshot.isCategoryEnabled(category)) {
+            return null;
+        }
+        Suppressor.Result result = suppressor.filter(category, message);
+        if (result.drop) {
+            return null;
+        }
+        String stampedLine = stamp(result.line);
+        append(category, stampedLine);
+        if ("errors".equals(category)) {
+            DiscordAlerter.maybeSend("errors", result.line);
+        } else if ("warns".equals(category)) {
+            DiscordAlerter.maybeSend("warns", result.line);
+        }
+        if (result.summary != null && snapshot != null && snapshot.isCategoryEnabled("suppressed")) {
+            append("suppressed", stamp(result.summary));
+        }
+        notifyListeners(category, result.line);
+        return stampedLine;
+    }
+
+    private void writeWithPlayer(String category, UUID uuid, String playerName, String message) {
+        String decorated = decorateLineWithPlayer(uuid, playerName, message);
+        String stamped = write(category, decorated);
+        if (stamped != null) {
+            appendPlayer(category, uuid, playerName, stamped);
+        }
+    }
+
+    private void append(String category, String stampedLine) {
         String file = "global-" + today() + ".log";
-        new FileLogger(base).append(file, stamp(msg));
+        FileLogger fileLogger = getLogger(category);
+        writeExecutor.execute(() -> fileLogger.append(file, stampedLine));
     }
 
-    public void chat(java.util.UUID uuid, String msg) {
-        write("chat", msg);
-        writeForPlayer("chat", uuid, msg);
-    }
-    public void command(java.util.UUID uuid, String msg) {
-        write("commands", msg);
-        writeForPlayer("commands", uuid, msg);
-    }
-    public void economy(java.util.UUID uuid, String msg) {
-        write("economy", msg);
-        writeForPlayer("economy", uuid, msg);
-    }
-    public void combat(java.util.UUID uuid, String msg) {
-        write("combat", msg);
-        writeForPlayer("combat", uuid, msg);
-    }
-    public void inventory(java.util.UUID uuid, String msg) {
-        write("inventory", msg);
-        writeForPlayer("inventory", uuid, msg);
+    private void appendPlayer(String category, UUID uuid, String playerName, String stampedLine) {
+        ConfigSnapshot snapshot = this.configSnapshot;
+        if (snapshot == null || !snapshot.splitByPlayer) {
+            return;
+        }
+        String folder = playerFolder(uuid, playerName);
+        String loggerKey = "players".equals(category) ? category + "/" + folder : category + "/players/" + folder;
+        FileLogger playerLogger = getLogger(loggerKey);
+        String file = today() + ".log";
+        writeExecutor.execute(() -> playerLogger.append(file, stampedLine));
     }
 
+    private FileLogger getLogger(String category) {
+        return loggers.computeIfAbsent(category, key -> new FileLogger(new File(plugin.getDataFolder(), "logs/" + key)));
+    }
 
-    // === PATCHED3: Write also to logs/<category>/players/<uuid>/YYYY-MM-DD.log ===
-    private void writeForPlayerUUID(String category, java.util.UUID uuid, String msg) {
-        if (!plugin.getConfig().getBoolean("logs.split-by-player", true)) return;
-        java.io.File base = new java.io.File(plugin.getDataFolder(), "logs/" + category + "/players/" + uuid.toString());
-        base.mkdirs();
-        String file = new java.text.SimpleDateFormat("yyyy-MM-dd").format(new java.util.Date()) + ".log";
-        new FileLogger(base).append(file, stamp(msg));
+    private String today() {
+        return LocalDate.now(zoneId).format(dayFormatter);
+    }
+
+    private String stamp(String message) {
+        return "[" + LocalTime.now(zoneId).format(timeFormatter) + "] " + message;
+    }
+
+    private void notifyListeners(String category, String line) {
+        for (SinkListener listener : listeners) {
+            try {
+                listener.onLogged(category, line);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private boolean isCategoryEnabled(String category) {
+        ConfigSnapshot snapshot = this.configSnapshot;
+        return snapshot == null || snapshot.isCategoryEnabled(category);
+    }
+
+    private String playerFolder(UUID uuid, String playerName) {
+        PlayerTracker tracker = this.playerTracker;
+        if (tracker != null) {
+            return tracker.resolveFolder(uuid, playerName);
+        }
+        if (uuid == null) {
+            return "unknown";
+        }
+        String resolved = resolvePlayerName(uuid, playerName);
+        String safeName = sanitizePlayerName(resolved);
+        return safeName != null ? safeName + "-" + uuid : uuid.toString();
+    }
+
+    private String decorateLineWithPlayer(UUID uuid, String playerName, String message) {
+        String resolved = resolvePlayerName(uuid, playerName);
+        if (resolved == null || resolved.isEmpty()) {
+            resolved = uuid != null ? uuid.toString() : "unknown";
+        } else {
+            PlayerTracker tracker = this.playerTracker;
+            if (tracker != null && uuid != null) {
+                tracker.rememberName(uuid, resolved);
+            }
+        }
+        String id = uuid != null ? uuid.toString() : "unknown";
+        return "[" + resolved + "|" + id + "] " + message;
+    }
+
+    @Deprecated
+    public static String decoratePlayerLine(UUID uuid, String playerName, String message) {
+        String resolved = (playerName != null && !playerName.isEmpty()) ? playerName : (uuid != null ? uuid.toString() : "unknown");
+        String id = uuid != null ? uuid.toString() : "unknown";
+        return "[" + resolved + "|" + id + "] " + message;
+    }
+
+    @Deprecated
+    public static String splitPlayerPath(UUID uuid, String playerName) {
+        if (uuid == null) {
+            String safe = sanitizePlayerName(playerName);
+            return safe != null ? safe : "unknown";
+        }
+        String safe = sanitizePlayerName(playerName);
+        return safe != null ? safe + "-" + uuid : uuid.toString();
+    }
+
+    public static String sanitizePlayerName(String playerName) {
+        if (playerName == null) {
+            return null;
+        }
+        String normalized = Normalizer.normalize(playerName, Normalizer.Form.NFKC);
+        String sanitized = normalized.replaceAll("[^\\p{L}\\p{N}_.-]+", "_");
+        sanitized = sanitized.replaceAll("_+", "_");
+        sanitized = sanitized.replaceAll("^_+", "");
+        sanitized = sanitized.replaceAll("_+$", "");
+        if (sanitized.isEmpty()) {
+            return null;
+        }
+        return sanitized;
+    }
+
+    private String resolvePlayerName(UUID uuid, String playerName) {
+        if (playerName != null && !playerName.isEmpty()) {
+            return playerName;
+        }
+        PlayerTracker tracker = this.playerTracker;
+        if (tracker != null && uuid != null) {
+            String known = tracker.getLastKnownName(uuid);
+            if (known != null && !known.isEmpty()) {
+                return known;
+            }
+        }
+        return null;
+    }
+
+    private static final class ConfigSnapshot {
+        final boolean splitByPlayer;
+        final Map<String, Boolean> categories;
+
+        private ConfigSnapshot(boolean splitByPlayer, Map<String, Boolean> categories) {
+            this.splitByPlayer = splitByPlayer;
+            this.categories = categories;
+        }
+
+        static ConfigSnapshot from(Plugin plugin) {
+            Map<String, Boolean> categories = new HashMap<>();
+            ConfigurationSection section = plugin.getConfig().getConfigurationSection("logs.types");
+            if (section != null) {
+                for (String key : section.getKeys(false)) {
+                    categories.put(key, section.getBoolean(key, true));
+                }
+            }
+            boolean split = plugin.getConfig().getBoolean("logs.split-by-player", true);
+            return new ConfigSnapshot(split, Collections.unmodifiableMap(categories));
+        }
+
+        boolean isCategoryEnabled(String category) {
+            Boolean value = categories.get(category);
+            if (value == null) {
+                return true;
+            }
+            return value;
+        }
     }
 }
