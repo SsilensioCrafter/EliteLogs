@@ -129,7 +129,7 @@ public class LogRouter {
     }
 
     private void writeWithPlayer(String category, UUID uuid, String playerName, String message) {
-        String decorated = decoratePlayerLine(uuid, playerName, message);
+        String decorated = decorateLineWithPlayer(uuid, playerName, message);
         String stamped = write(category, decorated);
         if (stamped != null) {
             appendPlayer(category, uuid, playerName, stamped);
@@ -191,7 +191,7 @@ public class LogRouter {
         return safeName != null ? safeName + "-" + uuid : uuid.toString();
     }
 
-    private String decoratePlayerLine(UUID uuid, String playerName, String message) {
+    private String decorateLineWithPlayer(UUID uuid, String playerName, String message) {
         String resolved = resolvePlayerName(uuid, playerName);
         if (resolved == null || resolved.isEmpty()) {
             resolved = uuid != null ? uuid.toString() : "unknown";
