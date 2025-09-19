@@ -4,6 +4,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.Plugin;
 
 import java.io.File;
+import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -265,7 +266,8 @@ public class LogRouter {
         if (playerName == null) {
             return null;
         }
-        String sanitized = playerName.replaceAll("[^A-Za-z0-9_.-]+", "_");
+        String normalized = Normalizer.normalize(playerName, Normalizer.Form.NFKC);
+        String sanitized = normalized.replaceAll("[^\\p{L}\\p{N}_.-]+", "_");
         sanitized = sanitized.replaceAll("_+", "_");
         sanitized = sanitized.replaceAll("^_+", "");
         sanitized = sanitized.replaceAll("_+$", "");

@@ -13,6 +13,7 @@ public class Lang {
     private final Plugin plugin;
     private YamlConfiguration lang;
     private String activeCode = "en";
+    private static final List<String> BUNDLED = Arrays.asList("en", "ru");
 
     public Lang(Plugin plugin){ this.plugin = plugin; }
 
@@ -23,6 +24,7 @@ public class Lang {
         this.activeCode = code;
         File langDir = new File(plugin.getDataFolder(), "lang");
         if (!langDir.exists()) langDir.mkdirs();
+        migrateLegacy(langDir);
         ensureBundledLanguages(langDir);
 
         File file = new File(langDir, code + ".yml");
@@ -31,29 +33,43 @@ public class Lang {
             file = new File(langDir, "en.yml");
         }
         YamlConfiguration loaded = YamlConfiguration.loadConfiguration(file);
-        try (InputStream in = plugin.getResource("lang_en.yml")) {
-            if (in != null) {
-                YamlConfiguration defaults = YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8));
-                loaded.setDefaults(defaults);
-                loaded.options().copyDefaults(true);
+
+        YamlConfiguration defaults = loadBundledYaml(this.activeCode);
+        YamlConfiguration englishDefaults = loadBundledYaml("en");
+
+        if (defaults == null && englishDefaults != null) {
+            defaults = englishDefaults;
+        }
+
+        if (defaults != null) {
+            if (!"en".equals(this.activeCode) && englishDefaults != null && defaults != englishDefaults) {
+                defaults.addDefaults(englishDefaults.getValues(true));
             }
-        } catch (Exception ignored){}
+            loaded.setDefaults(defaults);
+            loaded.options().copyDefaults(true);
+        } else if (englishDefaults != null) {
+            loaded.setDefaults(englishDefaults);
+            loaded.options().copyDefaults(true);
+        }
+
+        try { loaded.save(file); } catch (IOException ignored) {}
+
         this.lang = loaded;
     }
 
     private void ensureBundledLanguages(File langDir) {
-        for (String bundled : Arrays.asList("en", "ru")) {
+        for (String bundled : BUNDLED) {
             File out = new File(langDir, bundled + ".yml");
             if (!out.exists()) {
                 try {
-                    copyRes("lang_" + bundled + ".yml", out);
+                    copyRes(bundled, out);
                 } catch (IOException ignored) {}
             }
         }
     }
 
-    private void copyRes(String res, File out) throws IOException {
-        try (InputStream in = plugin.getResource(res)) {
+    private void copyRes(String code, File out) throws IOException {
+        try (InputStream in = openBundled(code)) {
             if (in == null) return;
             out.getParentFile().mkdirs();
             try (OutputStream os = new FileOutputStream(out)) {
@@ -66,10 +82,45 @@ public class Lang {
         }
     }
 
+    private InputStream openBundled(String code) {
+        InputStream in = plugin.getResource("lang/" + code + ".yml");
+        if (in == null) {
+            in = plugin.getResource("lang_" + code + ".yml");
+        }
+        return in;
+    }
+
+    private YamlConfiguration loadBundledYaml(String code) {
+        if (code == null) {
+            return null;
+        }
+        try (InputStream in = openBundled(code)) {
+            if (in == null) {
+                return null;
+            }
+            return YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8));
+        } catch (IOException ignored) {
+            return null;
+        }
+    }
+
+    private void migrateLegacy(File langDir) {
+        for (String code : BUNDLED) {
+            File legacy = new File(plugin.getDataFolder(), "lang_" + code + ".yml");
+            if (legacy.exists()) {
+                File target = new File(langDir, code + ".yml");
+                if (!target.exists()) {
+                    //noinspection ResultOfMethodCallIgnored
+                    legacy.renameTo(target);
+                }
+            }
+        }
+    }
+
     public String get(String key){
         String v = lang.getString(key);
         if (v == null) {
-            try (InputStream in = plugin.getResource("lang_en.yml")) {
+            try (InputStream in = openBundled("en")) {
                 if (in != null) {
                     YamlConfiguration en = YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8));
                     v = en.getString(key, key);
@@ -80,7 +131,7 @@ public class Lang {
     }
     public List<String> getList(String key){
         if (lang.contains(key)) return lang.getStringList(key);
-        try (InputStream in = plugin.getResource("lang_en.yml")) {
+        try (InputStream in = openBundled("en")) {
             if (in != null) {
                 YamlConfiguration en = YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8));
                 return en.getStringList(key);

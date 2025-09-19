@@ -39,7 +39,13 @@ public class EliteLogsPlugin extends JavaPlugin {
         createFolderTree();
 
         if (getConfig().getBoolean("banner.enabled", true)) {
-            AsciiBanner.print(getLogger(), getDescription().getVersion(), getConfig().getString("banner.style","block"));
+            AsciiBanner.print(
+                    getLogger(),
+                    getDescription().getVersion(),
+                    getConfig().getString("banner.style", "block"),
+                    getConfig().getString("banner.color", "default"),
+                    getConfig().getBoolean("banner.show-version", true)
+            );
         }
 
         this.logRouter = new LogRouter(this);
