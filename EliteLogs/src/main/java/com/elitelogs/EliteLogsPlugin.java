@@ -38,6 +38,9 @@ public class EliteLogsPlugin extends JavaPlugin {
         this.lang = new Lang(this); lang.load();
         createFolderTree();
 
+        getLogger().info("[EliteLogs] Server version: " + ServerCompat.describeServerVersion());
+        getLogger().info("[EliteLogs] Compatibility range: " + ServerCompat.describeSupportedRange());
+
         if (getConfig().getBoolean("banner.enabled", true)) {
             AsciiBanner.print(
                     getLogger(),
@@ -64,7 +67,11 @@ public class EliteLogsPlugin extends JavaPlugin {
         if (getConfig().getBoolean("logs.types.combat", true)) Bukkit.getPluginManager().registerEvents(new DeathListener(logRouter), this);
         if (getConfig().getBoolean("logs.types.players", true)) Bukkit.getPluginManager().registerEvents(new JoinQuitListener(logRouter, playerTracker), this);
         if (getConfig().getBoolean("logs.types.combat", true)) Bukkit.getPluginManager().registerEvents(new CombatListener(logRouter), this);
-        if (getConfig().getBoolean("logs.types.inventory", true)) Bukkit.getPluginManager().registerEvents(new InventoryListener(logRouter, playerTracker), this);
+        if (getConfig().getBoolean("logs.types.inventory", true)) {
+            InventoryListener inventoryListener = new InventoryListener(logRouter, playerTracker);
+            Bukkit.getPluginManager().registerEvents(inventoryListener, this);
+            inventoryListener.registerCompatibilityListeners(this);
+        }
         if (getConfig().getBoolean("logs.types.economy", true)) Bukkit.getPluginManager().registerEvents(new EconomyListener(), this);
         if (getConfig().getBoolean("logs.types.rcon", true)) Bukkit.getPluginManager().registerEvents(new RconListener(logRouter), this);
 

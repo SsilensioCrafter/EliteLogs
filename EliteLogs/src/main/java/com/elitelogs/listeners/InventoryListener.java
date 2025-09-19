@@ -1,12 +1,12 @@
 package com.elitelogs.listeners;
 import com.elitelogs.utils.LogRouter;
 import com.elitelogs.utils.PlayerTracker;
-import org.bukkit.entity.Entity;
+import com.elitelogs.utils.ServerCompat;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCreativeEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -14,6 +14,7 @@ import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
 
 public class InventoryListener implements Listener {
   private final LogRouter router;
@@ -28,8 +29,8 @@ public class InventoryListener implements Listener {
     Inventory inv = e.getInventory();
     ItemStack item = e.getCurrentItem();
     InventoryView view = e.getView();
-    String title = view != null && view.getTitle() != null ? view.getTitle() : inv.getType().name();
-    String holder = (inv.getHolder()!=null)? inv.getHolder().getClass().getSimpleName() : "none";
+    String title = ServerCompat.getInventoryTitle(view, inv);
+    String holder = ServerCompat.describeInventoryHolder(inv);
     String itemStr = describeItem(item);
     String cursor = describeItem(e.getCursor());
     String msg = String.format("[inv] slot=%d action=%s click=%s gui=%s holder=%s item=%s cursor=%s",
@@ -79,19 +80,22 @@ public class InventoryListener implements Listener {
     if (tracker != null) tracker.action(p, msg);
   }
 
-  @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-  public void onPickup(EntityPickupItemEvent e) {
-    Entity entity = e.getEntity();
-    if (!(entity instanceof Player)) {
+  public void registerCompatibilityListeners(Plugin plugin) {
+    PickupEventBridge.register(plugin, this);
+  }
+
+  void handlePickupEvent(Player player, ItemStack stack, Location location) {
+    if (player == null) {
       return;
     }
-    Player p = (Player) entity;
-    String itemStr = describeItem(e.getItem().getItemStack());
-    org.bukkit.Location loc = e.getItem().getLocation();
-    String msg = String.format("[inv] pickup item=%s loc=%.1f,%.1f,%.1f", itemStr,
-            loc.getX(), loc.getY(), loc.getZ());
-    router.inventory(p.getUniqueId(), p.getName(), msg);
-    if (tracker != null) tracker.action(p, msg);
+    Location loc = location != null ? location : safeLocation(player);
+    double x = loc != null ? loc.getX() : 0.0;
+    double y = loc != null ? loc.getY() : 0.0;
+    double z = loc != null ? loc.getZ() : 0.0;
+    String itemStr = describeItem(stack);
+    String msg = String.format("[inv] pickup item=%s loc=%.1f,%.1f,%.1f", itemStr, x, y, z);
+    router.inventory(player.getUniqueId(), player.getName(), msg);
+    if (tracker != null) tracker.action(player, msg);
   }
 
   private String describeItem(ItemStack stack) {
@@ -107,5 +111,13 @@ public class InventoryListener implements Listener {
       sb.append(" ench=").append(stack.getEnchantments());
     }
     return sb.toString();
+  }
+
+  private Location safeLocation(Player player) {
+    try {
+      return player.getLocation();
+    } catch (Throwable ignored) {
+      return null;
+    }
   }
 }

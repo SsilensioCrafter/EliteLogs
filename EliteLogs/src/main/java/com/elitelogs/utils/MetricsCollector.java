@@ -31,7 +31,7 @@ public class MetricsCollector {
             double cpu = getCpuLoadPercent();
             long used = getHeapUsedMB();
             long max = getHeapMaxMB();
-            int online = Bukkit.getOnlinePlayers().size();
+            int online = ServerCompat.getOnlinePlayerCount();
             router.write("stats", String.format("[metrics] TPS=%.2f CPU=%.1f%% HEAP=%d/%dMB ONLINE=%d",
                     currentTPS, cpu, used, max, online));
         }, 20L, interval * 20L);
