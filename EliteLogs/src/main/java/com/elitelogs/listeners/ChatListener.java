@@ -1,20 +1,21 @@
 package com.elitelogs.listeners;
 import com.elitelogs.utils.LogRouter;
-import com.elitelogs.utils.PlayerTrackerHolder;
+import com.elitelogs.utils.PlayerTracker;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 
 public class ChatListener implements Listener {
   private final LogRouter router;
+  private final PlayerTracker tracker;
 
-  public ChatListener(LogRouter r){ this.router = r; }
+  public ChatListener(LogRouter r, PlayerTracker tracker){ this.router = r; this.tracker = tracker; }
 
   @EventHandler public void onChat(AsyncPlayerChatEvent e){
     String message = e.getMessage();
     router.chat(e.getPlayer().getUniqueId(), e.getPlayer().getName(), message);
-    if (PlayerTrackerHolder.get()!=null) {
-      PlayerTrackerHolder.get().action(e.getPlayer(), "[chat] " + message);
+    if (tracker != null) {
+      tracker.action(e.getPlayer(), "[chat] " + message);
     }
   }
 }

@@ -19,6 +19,7 @@ import java.util.UUID;
 public class VaultEconomyTracker {
     private final Plugin plugin;
     private final LogRouter router;
+    private final PlayerTracker playerTracker;
     private final Map<UUID, Double> last = new HashMap<>();
     private Object economy; // net.milkbowl.vault.economy.Economy
     private BalanceAccessor balanceAccessor;
@@ -35,9 +36,10 @@ public class VaultEconomyTracker {
         double get(Player player) throws Exception;
     }
 
-    public VaultEconomyTracker(Plugin plugin, LogRouter router){
+    public VaultEconomyTracker(Plugin plugin, LogRouter router, PlayerTracker tracker){
         this.plugin = plugin;
         this.router = router;
+        this.playerTracker = tracker;
     }
 
     private boolean ensureHooked(){
@@ -112,12 +114,12 @@ public class VaultEconomyTracker {
                     if (prev == null) {
                         String msg = String.format(Locale.US, "[vault] balance %.2f (initial)", bal);
                         router.economy(p.getUniqueId(), p.getName(), msg);
-                        if (PlayerTrackerHolder.get()!=null) PlayerTrackerHolder.get().action(p, msg);
+                        if (playerTracker != null) playerTracker.action(p, msg);
                     } else if (Math.abs(bal - prev) > 0.001){
                         double delta = bal - prev;
                         String msg = String.format(Locale.US, "[vault] balance %.2f -> %.2f (Δ %.2f)", prev, bal, delta);
                         router.economy(p.getUniqueId(), p.getName(), msg);
-                        if (PlayerTrackerHolder.get()!=null) PlayerTrackerHolder.get().action(p, msg);
+                        if (playerTracker != null) playerTracker.action(p, msg);
                     }
                 } catch (Throwable t) {
                     if (!errorLogged) {
@@ -281,8 +283,8 @@ public class VaultEconomyTracker {
 
                     if (uuid != null) {
                         router.economy(uuid, name, finalLine);
-                        if (PlayerTrackerHolder.get() != null) {
-                            PlayerTrackerHolder.get().action(uuid, name, finalLine);
+                        if (playerTracker != null) {
+                            playerTracker.action(uuid, name, finalLine);
                         }
                     } else if (name != null && !name.isEmpty()) {
                         router.write("economy", finalLine + " player=" + name);

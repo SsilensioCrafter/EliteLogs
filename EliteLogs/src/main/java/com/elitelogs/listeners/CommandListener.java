@@ -1,7 +1,7 @@
 package com.elitelogs.listeners;
 import com.elitelogs.utils.FileLogger;
 import com.elitelogs.utils.LogRouter;
-import com.elitelogs.utils.PlayerTrackerHolder;
+import com.elitelogs.utils.PlayerTracker;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -15,18 +15,20 @@ import java.util.Date;
 public class CommandListener implements Listener {
   private final Plugin plugin;
   private final LogRouter router;
+  private final PlayerTracker tracker;
 
-  public CommandListener(Plugin plugin, LogRouter router){
+  public CommandListener(Plugin plugin, LogRouter router, PlayerTracker tracker){
     this.plugin = plugin;
     this.router = router;
+    this.tracker = tracker;
   }
 
   @EventHandler public void onCmd(PlayerCommandPreprocessEvent e){
     Player p = e.getPlayer();
     String commandLine = e.getMessage();
     router.command(p.getUniqueId(), p.getName(), commandLine);
-    if (PlayerTrackerHolder.get()!=null) {
-      PlayerTrackerHolder.get().action(p, "[cmd] " + commandLine);
+    if (tracker != null) {
+      tracker.action(p, "[cmd] " + commandLine);
     }
 
     try {

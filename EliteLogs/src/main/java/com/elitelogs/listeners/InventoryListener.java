@@ -1,6 +1,6 @@
 package com.elitelogs.listeners;
 import com.elitelogs.utils.LogRouter;
-import com.elitelogs.utils.PlayerTrackerHolder;
+import com.elitelogs.utils.PlayerTracker;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -10,8 +10,9 @@ import org.bukkit.inventory.ItemStack;
 
 public class InventoryListener implements Listener {
   private final LogRouter router;
+  private final PlayerTracker tracker;
 
-  public InventoryListener(LogRouter r){ this.router = r; }
+  public InventoryListener(LogRouter r, PlayerTracker tracker){ this.router = r; this.tracker = tracker; }
 
   @EventHandler public void onInv(InventoryClickEvent e){
     if (!(e.getWhoClicked() instanceof Player)) return;
@@ -24,6 +25,6 @@ public class InventoryListener implements Listener {
     String msg = String.format("[inv] slot=%d action=%s click=%s gui=%s holder=%s item=%s",
             e.getSlot(), e.getAction(), e.getClick(), title, holder, itemStr);
     router.inventory(p.getUniqueId(), p.getName(), msg);
-    if (PlayerTrackerHolder.get()!=null) PlayerTrackerHolder.get().action(p, msg);
+    if (tracker != null) tracker.action(p, msg);
   }
 }

@@ -31,6 +31,7 @@ public class LogRouter {
     private final DateTimeFormatter dayFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ROOT);
     private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ROOT);
     private volatile ConfigSnapshot configSnapshot;
+    private volatile PlayerTracker playerTracker;
 
     public LogRouter(Plugin plugin) {
         this.plugin = plugin;
@@ -41,6 +42,10 @@ public class LogRouter {
     public void reloadConfig() {
         this.suppressor.reload();
         this.configSnapshot = ConfigSnapshot.from(plugin);
+    }
+
+    public void setPlayerTracker(PlayerTracker tracker) {
+        this.playerTracker = tracker;
     }
 
     public void addListener(SinkListener listener) {
@@ -173,8 +178,8 @@ public class LogRouter {
         return snapshot == null || snapshot.isCategoryEnabled(category);
     }
 
-    private static String playerFolder(UUID uuid, String playerName) {
-        PlayerTracker tracker = PlayerTrackerHolder.get();
+    private String playerFolder(UUID uuid, String playerName) {
+        PlayerTracker tracker = this.playerTracker;
         if (tracker != null) {
             return tracker.resolveFolder(uuid, playerName);
         }
@@ -186,12 +191,12 @@ public class LogRouter {
         return safeName != null ? safeName + "-" + uuid : uuid.toString();
     }
 
-    public static String decoratePlayerLine(UUID uuid, String playerName, String message) {
+    private String decoratePlayerLine(UUID uuid, String playerName, String message) {
         String resolved = resolvePlayerName(uuid, playerName);
         if (resolved == null || resolved.isEmpty()) {
             resolved = uuid != null ? uuid.toString() : "unknown";
         } else {
-            PlayerTracker tracker = PlayerTrackerHolder.get();
+            PlayerTracker tracker = this.playerTracker;
             if (tracker != null && uuid != null) {
                 tracker.rememberName(uuid, resolved);
             }
@@ -201,8 +206,20 @@ public class LogRouter {
     }
 
     @Deprecated
+    public static String decoratePlayerLine(UUID uuid, String playerName, String message) {
+        String resolved = (playerName != null && !playerName.isEmpty()) ? playerName : (uuid != null ? uuid.toString() : "unknown");
+        String id = uuid != null ? uuid.toString() : "unknown";
+        return "[" + resolved + "|" + id + "] " + message;
+    }
+
+    @Deprecated
     public static String splitPlayerPath(UUID uuid, String playerName) {
-        return playerFolder(uuid, playerName);
+        if (uuid == null) {
+            String safe = sanitizePlayerName(playerName);
+            return safe != null ? safe : "unknown";
+        }
+        String safe = sanitizePlayerName(playerName);
+        return safe != null ? safe + "-" + uuid : uuid.toString();
     }
 
     public static String sanitizePlayerName(String playerName) {
@@ -219,11 +236,11 @@ public class LogRouter {
         return sanitized;
     }
 
-    private static String resolvePlayerName(UUID uuid, String playerName) {
+    private String resolvePlayerName(UUID uuid, String playerName) {
         if (playerName != null && !playerName.isEmpty()) {
             return playerName;
         }
-        PlayerTracker tracker = PlayerTrackerHolder.get();
+        PlayerTracker tracker = this.playerTracker;
         if (tracker != null && uuid != null) {
             String known = tracker.getLastKnownName(uuid);
             if (known != null && !known.isEmpty()) {

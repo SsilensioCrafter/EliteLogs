@@ -43,25 +43,23 @@ public class EliteLogsPlugin extends JavaPlugin {
         }
 
         this.logRouter = new LogRouter(this);
+        this.playerTracker = new PlayerTracker(getDataFolder());
+        this.logRouter.setPlayerTracker(playerTracker);
         this.consoleHook = new ConsoleHook(logRouter);
         consoleHook.hook(); this.consoleTee = new ConsoleTee(logRouter); consoleTee.hook();
         DiscordAlerter.init(this);
 
         // Listeners
-        if (getConfig().getBoolean("logs.types.chat", true)) Bukkit.getPluginManager().registerEvents(new ChatListener(logRouter), this);
-        if (getConfig().getBoolean("logs.types.commands", true)) Bukkit.getPluginManager().registerEvents(new CommandListener(this, logRouter), this);
+        if (getConfig().getBoolean("logs.types.chat", true)) Bukkit.getPluginManager().registerEvents(new ChatListener(logRouter, playerTracker), this);
+        if (getConfig().getBoolean("logs.types.commands", true)) Bukkit.getPluginManager().registerEvents(new CommandListener(this, logRouter, playerTracker), this);
         if (getConfig().getBoolean("logs.types.combat", true)) Bukkit.getPluginManager().registerEvents(new DeathListener(logRouter), this);
-        if (getConfig().getBoolean("logs.types.players", true)) Bukkit.getPluginManager().registerEvents(new JoinQuitListener(logRouter), this);
+        if (getConfig().getBoolean("logs.types.players", true)) Bukkit.getPluginManager().registerEvents(new JoinQuitListener(logRouter, playerTracker), this);
         if (getConfig().getBoolean("logs.types.combat", true)) Bukkit.getPluginManager().registerEvents(new CombatListener(logRouter), this);
-        if (getConfig().getBoolean("logs.types.inventory", true)) Bukkit.getPluginManager().registerEvents(new InventoryListener(logRouter), this);
+        if (getConfig().getBoolean("logs.types.inventory", true)) Bukkit.getPluginManager().registerEvents(new InventoryListener(logRouter, playerTracker), this);
         if (getConfig().getBoolean("logs.types.economy", true)) Bukkit.getPluginManager().registerEvents(new EconomyListener(), this);
 
-        // Players tracker
-        this.playerTracker = new PlayerTracker(getDataFolder());
-        PlayerTrackerHolder.set(playerTracker);
-
         // Metrics + Watchdog + Economy
-        this.metricsCollector = new MetricsCollector(this, logRouter); this.eco = new VaultEconomyTracker(this, logRouter);
+        this.metricsCollector = new MetricsCollector(this, logRouter); this.eco = new VaultEconomyTracker(this, logRouter, playerTracker);
         if (getConfig().getBoolean("metrics.enabled", true)) metricsCollector.start(); if (getConfig().getBoolean("logs.types.economy", true)) eco.start();
 
         this.watchdog = new Watchdog(this, logRouter, metricsCollector);
