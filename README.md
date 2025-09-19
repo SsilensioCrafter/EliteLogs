@@ -18,6 +18,14 @@
 
 ---
 
+## 🛠️ Compatibility
+- ✅ **Spigot** 1.20 – 1.21.x  
+- ✅ **Paper** 1.20 – 1.21.x  
+- ☕ Requires **Java 17+** (recommended: Java 21)  
+- ❓ Other versions **might work but are not tested**  
+
+---
+
 ## ✨ Features
 - Comprehensive logging: chat, commands, economy, combat, inventory, info, stats, console, sessions, warnings, errors, and more.
 - Per-player logs with dedicated folders (`logs/<module>/players/<uuid>`) and session histories (`logs/players/<playerName>/sessions`).
