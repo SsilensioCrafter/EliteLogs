@@ -226,7 +226,7 @@ public class LogRouter {
         if (playerName == null) {
             return null;
         }
-        String sanitized = playerName.replaceAll("[^A-Za-z0-9_\-\.]+", "_");
+        String sanitized = playerName.replaceAll("[^A-Za-z0-9_.-]+", "_");
         sanitized = sanitized.replaceAll("_+", "_");
         sanitized = sanitized.replaceAll("^_+", "");
         sanitized = sanitized.replaceAll("_+$", "");
