@@ -44,11 +44,11 @@
 - Written with more caffeine than code — but stable enough to trust your server with.
 
 ## 🧩 Version compatibility
-| Диапазон | Что работает |
+| Range | What works |
 | --- | --- |
-| 1.8.x – 1.12.x | Листенеры используют рефлексию для `getItemInMainHand` и старых событий подбора (`PlayerPickupItemEvent`), поэтому сборка сохраняет весь инвентарный функционал даже на старых ядрах. |
-| 1.13.x – 1.20.6 | Современные события (`EntityPickupItemEvent`) и коллекционный `Bukkit.getOnlinePlayers()` используются, когда доступны, без ломки на старых версиях. |
-| 1.21.x | Достаточно собрать проект с зависимостью `spigot-api:1.21.x` — совместимый слой продолжает работать без изменений, остаётся только прогнать тесты. |
+| 1.8.x – 1.12.x | Listeners use reflection for `getItemInMainHand` and legacy pickup events (`PlayerPickupItemEvent`), so the build retains full inventory functionality even on older server cores. |
+| 1.13.x – 1.20.6 | Modern events (`EntityPickupItemEvent`) and the collection-based `Bukkit.getOnlinePlayers()` are used when available, without breaking on older versions. |
+| 1.21.x | Simply build the project with the `spigot-api:1.21.x` dependency — the compatibility layer continues to work without changes, you only need to run tests. |
 
 ---
 
@@ -193,3 +193,4 @@ watchdog:
     run-inspector: true       # Run inspector on trigger
     create-crash-report: true # Generate crash report
     discord-alert: true       # Send alert to Discord
+
