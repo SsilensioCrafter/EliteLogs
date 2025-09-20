@@ -1,5 +1,8 @@
-package com.elitelogs.utils;
+package com.elitelogs.integration;
 
+import com.elitelogs.compat.ServerCompat;
+import com.elitelogs.logging.LogRouter;
+import com.elitelogs.players.PlayerTracker;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
@@ -107,7 +110,7 @@ public class VaultEconomyTracker {
             }
             warnedNoAccessor = false;
             boolean errorLogged = false;
-            for (Player p : Bukkit.getOnlinePlayers()){
+            for (Player p : ServerCompat.getOnlinePlayers()){
                 try {
                     double bal = accessor.get(p);
                     Double prev = last.put(p.getUniqueId(), bal);

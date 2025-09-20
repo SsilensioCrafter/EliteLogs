@@ -1,5 +1,7 @@
-package com.elitelogs.utils;
+package com.elitelogs.logging;
 
+import com.elitelogs.integration.DiscordAlerter;
+import com.elitelogs.players.PlayerTracker;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.Plugin;
 
@@ -81,14 +83,6 @@ public class LogRouter {
     public void setListener(SinkListener listener) {
         listeners.clear();
         addListener(listener);
-    }
-
-    public void info(String message) {
-        write("info", message);
-    }
-
-    public void info(UUID uuid, String playerName, String message) {
-        writeWithPlayer("info", uuid, playerName, message);
     }
 
     public void warn(String message) {

@@ -1,4 +1,4 @@
-package com.elitelogs.utils;
+package com.elitelogs.localization;
 
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.Plugin;
@@ -13,7 +13,7 @@ public class Lang {
     private final Plugin plugin;
     private YamlConfiguration lang;
     private String activeCode = "en";
-    private static final List<String> BUNDLED = Arrays.asList("en", "ru");
+    private static final List<String> BUNDLED = Arrays.asList("en", "ru", "de", "fr", "es");
 
     public Lang(Plugin plugin){ this.plugin = plugin; }
 

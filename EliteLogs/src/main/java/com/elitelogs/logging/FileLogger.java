@@ -1,4 +1,4 @@
-package com.elitelogs.utils;
+package com.elitelogs.logging;
 
 import java.io.BufferedWriter;
 import java.io.File;

@@ -1,5 +1,6 @@
 package com.elitelogs.listeners;
-import com.elitelogs.utils.LogRouter;
+import com.elitelogs.logging.LogRouter;
+import com.elitelogs.compat.ServerCompat;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -29,7 +30,8 @@ public class CombatListener implements Listener {
       } else {
         target = e.getEntity().getType().name();
       }
-      String weapon = killer.getInventory().getItemInMainHand().getType().name();
+      org.bukkit.inventory.ItemStack stack = ServerCompat.getHeldItem(killer);
+      String weapon = stack != null ? stack.getType().name() : "UNKNOWN";
       router.combat(killer.getUniqueId(), killer.getName(), "[kill] target=" + target + " weapon=" + weapon + " " + locStr);
     }
   }

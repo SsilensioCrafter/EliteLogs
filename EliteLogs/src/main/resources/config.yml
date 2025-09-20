@@ -4,11 +4,22 @@
 # ============================
 # Encoding: UTF-8 (no BOM)
 # Indentation: 2 spaces (tabs are NOT allowed)
+# Tip: values prefixed with "§" use Minecraft color codes.
+
+# ── Core behaviour ──────────────────────────────────────────────────────────────
+# enabled: Master toggle for the entire plugin. Set to false to disable all
+#          listeners without removing the jar.
+# debug:   Emits extra diagnostic output in console and YAML reports.
+# language:Locale of bundled messages (matches files in /lang/ folder).
+#          Available codes: en, ru, de, fr, es.
 
 enabled: true
 debug: false
 language: en
 
+# ── Console colors ──────────────────────────────────────────────────────────────
+# These settings control the start-up banner and CLI feedback. When playing on a
+# vanilla console (no colors), disable the whole block.
 ansi:
   enabled: true
   color-ok: "§a"
@@ -16,12 +27,16 @@ ansi:
   color-fail: "§c"
   reset: "§f"
 
+# ── Start-up banner ─────────────────────────────────────────────────────────────
+# Shows a fancy header on enable. style can be "block" (default) or "slim".
 banner:
   enabled: true
   show-version: true
   style: block
   color: default
 
+# ── Discord webhooks ───────────────────────────────────────────────────────────
+# Provide a webhook URL to forward alerts. Rate limiting prevents spam bursts.
 discord:
   enabled: false
   webhook-url: ""
@@ -33,6 +48,10 @@ discord:
     watchdog: true
     inspector: true
 
+# ── File logging ───────────────────────────────────────────────────────────────
+# rotate:      Rolls files daily. keep-days controls retention for archives.
+# split-by-player: Creates per-player folders with their own histories.
+# legacy.flat-player-files: enable only if you need old plaintext format.
 logs:
   rotate: true
   keep-days: 30
@@ -41,26 +60,30 @@ logs:
   legacy:
     flat-player-files: false
   types:
-    info: true
     warns: true
     errors: true
     chat: true
     commands: true
-    players: true
+    players: true       # Includes join/quit events and per-player folders
     combat: true
     inventory: true
     economy: true
     stats: true
     console: true
     rcon: true
-    suppressed: true
+    suppressed: true  # catch-all bucket for anything muted elsewhere
 
+# ── Session reports ────────────────────────────────────────────────────────────
+# Save interval defines how often session YAML is written. Disable players/global
+# individually if you only need one perspective.
 sessions:
   enabled: true
   autosave-minutes: 10
   save-global: true
   save-players: true
 
+# ── Inspector snapshots ────────────────────────────────────────────────────────
+# inspector exports server environment and mod/plugin lists on demand.
 inspector:
   enabled: true
   include-mods: true
@@ -68,10 +91,15 @@ inspector:
   include-garbage: true
   include-server-info: true
 
+# ── Metrics collector ──────────────────────────────────────────────────────────
+# Anonymous runtime statistics for spotting trends. Interval in seconds.
 metrics:
   enabled: true
   interval-seconds: 60
 
+# ── Chat suppressor ────────────────────────────────────────────────────────────
+# Filters spam by caching recent messages. mode can be "blacklist" or
+# "whitelist"; filters accepts regex entries.
 suppressor:
   enabled: true
   mode: blacklist
@@ -80,6 +108,9 @@ suppressor:
   cache-ttl-seconds: 300
   filters: []
 
+# ── Watchdog automation ────────────────────────────────────────────────────────
+# Trigger emergency routines when TPS or error count goes out of range.
+# Actions can chain tasks like running the inspector or pinging Discord.
 watchdog:
   enabled: true
   tps-threshold: 5.0

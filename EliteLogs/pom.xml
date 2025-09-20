@@ -4,11 +4,11 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.elitelogs</groupId>
   <artifactId>EliteLogs</artifactId>
-  <version>1.0.0</version>
+  <version>1.1.0</version>
   <name>EliteLogs</name>
   <properties>
-    <maven.compiler.source>17</maven.compiler.source>
-    <maven.compiler.target>17</maven.compiler.target>
+    <maven.compiler.source>8</maven.compiler.source>
+    <maven.compiler.target>8</maven.compiler.target>
   </properties>
   <repositories>
     <repository>

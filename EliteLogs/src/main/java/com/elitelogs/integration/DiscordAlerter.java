@@ -1,4 +1,4 @@
-package com.elitelogs.utils;
+package com.elitelogs.integration;
 
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.Plugin;

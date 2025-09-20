@@ -1,4 +1,4 @@
-package com.elitelogs.utils;
+package com.elitelogs.logging;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.Appender;

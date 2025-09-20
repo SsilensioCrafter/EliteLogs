@@ -1,7 +1,7 @@
 package com.elitelogs.listeners;
-import com.elitelogs.utils.FileLogger;
-import com.elitelogs.utils.LogRouter;
-import com.elitelogs.utils.PlayerTracker;
+import com.elitelogs.logging.FileLogger;
+import com.elitelogs.logging.LogRouter;
+import com.elitelogs.players.PlayerTracker;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;

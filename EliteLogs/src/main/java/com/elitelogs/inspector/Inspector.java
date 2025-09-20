@@ -1,17 +1,31 @@
 package com.elitelogs.inspector;
 
 import com.elitelogs.EliteLogsPlugin;
-import com.elitelogs.utils.DiscordAlerter;
-import com.elitelogs.utils.Lang;
+import com.elitelogs.integration.DiscordAlerter;
+import com.elitelogs.localization.Lang;
+import com.elitelogs.reporting.YamlReportWriter;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.lang.management.ManagementFactory;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
+import java.nio.file.Files;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.logging.Level;
 
 public class Inspector {
     private final EliteLogsPlugin plugin;
@@ -33,97 +47,154 @@ public class Inspector {
 
     public void runAll(){
         String ts = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
-        File f = new File(outDir, "inspector-report-" + ts + ".txt");
-        try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream(f), StandardCharsets.UTF_8))){
-            writePlugins(pw); writeMods(pw); writeConfigs(pw); writeGarbage(pw); writeServerInfo(pw);
+        File f = new File(outDir, "inspector-report-" + ts + ".yml");
+        try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream(f), StandardCharsets.UTF_8))) {
+            YamlReportWriter yaml = new YamlReportWriter(pw);
+            writePlugins(yaml);
+            writeMods(yaml);
+            writeConfigs(yaml);
+            writeGarbage(yaml);
+            writeServerInfo(yaml);
+            yaml.flush();
             DiscordAlerter.maybeSend("inspector","Inspector report updated: " + f.getName());
-        } catch (Exception ignored){}
-    }
-
-    private void writePlugins(PrintWriter pw){
-        pw.println(t("inspector.plugins-header"));
-        Plugin[] ps = Bukkit.getPluginManager().getPlugins();
-        for (Plugin p : ps){
-            String ver = (p.getDescription()!=null && p.getDescription().getVersion()!=null && !p.getDescription().getVersion().isEmpty())
-                    ? p.getDescription().getVersion() : t("inspector.plugins-version-unknown");
-            String state = p.isEnabled() ? t("inspector.plugins-enabled") : t("inspector.plugins-disabled");
-            String line = t("inspector.plugins-format")
-                    .replace("{name}", p.getName())
-                    .replace("{state}", state)
-                    .replace("{version}", ver);
-            pw.println(line);
+        } catch (IOException ex) {
+            plugin.getLogger().log(Level.WARNING, "[EliteLogs] Failed to write inspector report " + f.getName(), ex);
         }
-        pw.println();
     }
 
-    private void writeMods(PrintWriter pw){
-        if (!plugin.getConfig().getBoolean("inspector.include-mods", true)) return;
-        pw.println(t("inspector.mods-header"));
-        try {
-            Class<?> modList = Class.forName("net.minecraftforge.fml.ModList");
-            Object inst = modList.getMethod("get").invoke(null);
-            Collection<?> mods = (Collection<?>) modList.getMethod("getMods").invoke(inst);
-            for (Object m : mods){
-                String id = String.valueOf(m.getClass().getMethod("getModId").invoke(m));
-                String ver = String.valueOf(m.getClass().getMethod("getVersion").invoke(m));
-                pw.println(id + "\t" + ver);
+    private void writePlugins(YamlReportWriter yaml){
+        yaml.section("plugins", section -> {
+            section.scalar("header", t("inspector.plugins-header"));
+            Plugin[] ps = Bukkit.getPluginManager().getPlugins();
+            if (ps.length == 0) {
+                section.emptyList("entries");
+                return;
             }
-        } catch (Throwable t){
-            pw.println(t("inspector.mods-missing"));
-        }
-        pw.println();
+            section.list("entries", list -> {
+                for (Plugin p : ps){
+                    String ver = (p.getDescription()!=null && p.getDescription().getVersion()!=null && !p.getDescription().getVersion().isEmpty())
+                            ? p.getDescription().getVersion() : t("inspector.plugins-version-unknown");
+                    String state = p.isEnabled() ? t("inspector.plugins-enabled") : t("inspector.plugins-disabled");
+                    list.item(item -> {
+                        item.scalar("name", p.getName());
+                        item.scalar("state", state);
+                        item.scalar("version", ver);
+                    });
+                }
+            });
+        });
+        yaml.blankLine();
     }
 
-    private void writeConfigs(PrintWriter pw){
-        if (!plugin.getConfig().getBoolean("inspector.include-configs", true)) return;
-        List<String> okExt = Arrays.asList(".yml",".yaml",".json",".toml",".cfg");
-        pw.println(t("inspector.configs-header"));
-        for (File dir : new File[]{configDir, serverConfigDir}){
-            if (dir == null || !dir.exists()) continue;
+    private void writeMods(YamlReportWriter yaml){
+        boolean include = plugin.getConfig().getBoolean("inspector.include-mods", true);
+        yaml.section("mods", section -> {
+            section.scalar("header", t("inspector.mods-header"));
+            section.scalar("included", include);
+            if (!include) {
+                return;
+            }
             try {
-                Files.walk(dir.toPath()).filter(Files::isRegularFile).forEach(p -> {
-                    File cf = p.toFile();
-                    String rel = dir.toPath().relativize(p).toString().replace("\\","/");
-                    String name = cf.getName().toLowerCase(Locale.ROOT);
-                    String ext = name.contains(".") ? name.substring(name.lastIndexOf(".")) : "";
-                    String status = t("inspector.configs-status-ok");
-                    if (cf.length() == 0) status = t("inspector.configs-status-empty");
-                    else if (!okExt.contains(ext)) status = t("inspector.configs-status-not-needed");
-                    String base = name.replace(ext,"");
-                    boolean pluginExists = Arrays.stream(Bukkit.getPluginManager().getPlugins())
-                            .anyMatch(pl -> pl.getName().equalsIgnoreCase(base));
-                    if (!pluginExists && okExt.contains(ext)) status = t("inspector.configs-status-orphaned");
-                    try {
-                        String line = t("inspector.configs-format")
-                                .replace("{folder}", dir.getName())
-                                .replace("{path}", rel)
-                                .replace("{status}", status);
-                        pw.println(line);
-                    } catch(Exception ignored){}
-                });
-            } catch (Exception ignored){}
-        }
-        pw.println();
-    }
-
-    private void writeGarbage(PrintWriter pw){
-        if (!plugin.getConfig().getBoolean("inspector.include-garbage", true)) return;
-        pw.println(t("inspector.garbage-header"));
-        scanGarbage(pw, new File(serverRoot, "plugins"), ".jar");
-        scanGarbage(pw, new File(serverRoot, "mods"), ".jar");
-        scanGarbage(pw, configDir, ".yml",".yaml",".json",".toml",".cfg");
-        scanGarbage(pw, serverConfigDir, ".yml",".yaml",".json",".toml",".cfg");
-        File[] files = serverRoot.listFiles();
-        if (files != null) for (File x : files){
-            String n = x.getName().toLowerCase(Locale.ROOT);
-            if (n.endsWith(".zip") || n.endsWith(".rar") || n.endsWith(".old") || n.endsWith(".log")){
-                pw.println(t("inspector.garbage-root").replace("{name}", x.getName()));
+                Class<?> modList = Class.forName("net.minecraftforge.fml.ModList");
+                Object inst = modList.getMethod("get").invoke(null);
+                Collection<?> mods = (Collection<?>) modList.getMethod("getMods").invoke(inst);
+                if (mods == null || mods.isEmpty()) {
+                    section.emptyList("entries");
+                } else {
+                    section.list("entries", list -> {
+                        for (Object m : mods){
+                            String id = describeModString(m, "getModId");
+                            String ver = describeModString(m, "getVersion");
+                            list.item(item -> {
+                                item.scalar("id", id);
+                                item.scalar("version", ver);
+                            });
+                        }
+                    });
+                }
+            } catch (Throwable t){
+                section.scalar("error", t("inspector.mods-missing"));
             }
-        }
-        pw.println();
+        });
+        yaml.blankLine();
     }
 
-    private void scanGarbage(PrintWriter pw, File dir, String... goodExts){
+    private void writeConfigs(YamlReportWriter yaml){
+        boolean include = plugin.getConfig().getBoolean("inspector.include-configs", true);
+        List<String> okExt = Arrays.asList(".yml",".yaml",".json",".toml",".cfg");
+        yaml.section("configs", section -> {
+            section.scalar("header", t("inspector.configs-header"));
+            section.scalar("included", include);
+            if (!include) {
+                return;
+            }
+            List<String[]> entries = new ArrayList<>();
+            for (File dir : new File[]{configDir, serverConfigDir}){
+                if (dir == null || !dir.exists()) continue;
+                try {
+                    Files.walk(dir.toPath()).filter(Files::isRegularFile).forEach(p -> {
+                        File cf = p.toFile();
+                        String rel = dir.toPath().relativize(p).toString().replace("\\","/");
+                        String name = cf.getName().toLowerCase(Locale.ROOT);
+                        String ext = name.contains(".") ? name.substring(name.lastIndexOf(".")) : "";
+                        String status = t("inspector.configs-status-ok");
+                        if (cf.length() == 0) status = t("inspector.configs-status-empty");
+                        else if (!okExt.contains(ext)) status = t("inspector.configs-status-not-needed");
+                        String base = name.replace(ext,"");
+                        boolean pluginExists = Arrays.stream(Bukkit.getPluginManager().getPlugins())
+                                .anyMatch(pl -> pl.getName().equalsIgnoreCase(base));
+                        if (!pluginExists && okExt.contains(ext)) status = t("inspector.configs-status-orphaned");
+                        entries.add(new String[]{dir.getName(), rel, status});
+                    });
+                } catch (IOException ignored){}
+            }
+            if (entries.isEmpty()) {
+                section.emptyList("entries");
+            } else {
+                section.list("entries", list -> {
+                    for (String[] entry : entries) {
+                        list.item(item -> {
+                            item.scalar("folder", entry[0]);
+                            item.scalar("path", entry[1]);
+                            item.scalar("status", entry[2]);
+                        });
+                    }
+                });
+            }
+        });
+        yaml.blankLine();
+    }
+
+    private void writeGarbage(YamlReportWriter yaml){
+        boolean include = plugin.getConfig().getBoolean("inspector.include-garbage", true);
+        yaml.section("garbage", section -> {
+            section.scalar("header", t("inspector.garbage-header"));
+            section.scalar("included", include);
+            if (!include) {
+                return;
+            }
+            List<String> entries = new ArrayList<>();
+            scanGarbage(entries, new File(serverRoot, "plugins"), ".jar");
+            scanGarbage(entries, new File(serverRoot, "mods"), ".jar");
+            scanGarbage(entries, configDir, ".yml",".yaml",".json",".toml",".cfg");
+            scanGarbage(entries, serverConfigDir, ".yml",".yaml",".json",".toml",".cfg");
+            File[] files = serverRoot.listFiles();
+            if (files != null) for (File x : files){
+                String n = x.getName().toLowerCase(Locale.ROOT);
+                if (n.endsWith(".zip") || n.endsWith(".rar") || n.endsWith(".old") || n.endsWith(".log")){
+                    entries.add(t("inspector.garbage-root").replace("{name}", x.getName()));
+                }
+            }
+            if (entries.isEmpty()) {
+                section.emptyList("entries");
+            } else {
+                section.list("entries", list -> entries.forEach(list::itemScalar));
+            }
+        });
+        yaml.blankLine();
+    }
+
+    private void scanGarbage(List<String> target, File dir, String... goodExts){
         if (dir == null || !dir.exists()) return;
         Set<String> ok = new HashSet<>(Arrays.asList(goodExts));
         File[] files = dir.listFiles(); if (files == null) return;
@@ -131,21 +202,45 @@ public class Inspector {
             if (f.isDirectory()) continue;
             String n = f.getName().toLowerCase(Locale.ROOT);
             String ext = n.contains(".") ? n.substring(n.lastIndexOf(".")) : "";
-            if (!ok.contains(ext)) pw.println(t("inspector.garbage-entry")
+            if (!ok.contains(ext)) target.add(t("inspector.garbage-entry")
                     .replace("{folder}", dir.getName())
                     .replace("{file}", f.getName()));
         }
     }
 
-    private void writeServerInfo(PrintWriter pw){
-        if (!plugin.getConfig().getBoolean("inspector.include-server-info", true)) return;
-        pw.println(t("inspector.server-header"));
-        pw.println(t("inspector.server-bukkit").replace("{value}", Bukkit.getVersion()));
-        pw.println(t("inspector.server-mc").replace("{value}", Bukkit.getBukkitVersion()));
-        pw.println(t("inspector.server-java").replace("{value}", System.getProperty("java.version")));
-        pw.println(t("inspector.server-os").replace("{value}", System.getProperty("os.name") + " " + System.getProperty("os.version")));
-        pw.println(t("inspector.server-cpu").replace("{value}", String.valueOf(ManagementFactory.getOperatingSystemMXBean().getAvailableProcessors())));
-        pw.println();
+    private String describeModString(Object mod, String method) {
+        if (mod == null || method == null || method.isEmpty()) {
+            return "unknown";
+        }
+        try {
+            Method accessor = mod.getClass().getMethod(method);
+            Object result = accessor.invoke(mod);
+            if (result != null) {
+                return String.valueOf(result);
+            }
+        } catch (Throwable t) {
+            plugin.getLogger().log(Level.FINEST, "[EliteLogs] Failed to query mod attribute " + method, t);
+        }
+        return "unknown";
+    }
+
+    private void writeServerInfo(YamlReportWriter yaml){
+        boolean include = plugin.getConfig().getBoolean("inspector.include-server-info", true);
+        yaml.section("server", section -> {
+            section.scalar("header", t("inspector.server-header"));
+            section.scalar("included", include);
+            if (!include) {
+                return;
+            }
+            section.section("details", details -> {
+                details.scalar("bukkit", Bukkit.getVersion());
+                details.scalar("minecraft", Bukkit.getBukkitVersion());
+                details.scalar("java", System.getProperty("java.version"));
+                details.scalar("os", System.getProperty("os.name") + " " + System.getProperty("os.version"));
+                details.scalar("cpu-cores", String.valueOf(ManagementFactory.getOperatingSystemMXBean().getAvailableProcessors()));
+            });
+        });
+        yaml.blankLine();
     }
 
     private String t(String key){

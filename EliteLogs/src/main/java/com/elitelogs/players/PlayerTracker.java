@@ -1,5 +1,6 @@
-package com.elitelogs.utils;
+package com.elitelogs.players;
 
+import com.elitelogs.logging.LogRouter;
 import org.bukkit.entity.Player;
 
 import java.io.File;
@@ -31,7 +32,7 @@ public class PlayerTracker {
         sessionStart.put(uuid, System.currentTimeMillis());
         String message = String.format("[LOGIN] %s", ipRegion);
         logSession(uuid, name, message);
-        appendModuleForPlayer(uuid, "info", stamp(message));
+        appendModuleForPlayer(uuid, "players", stamp(message));
     }
 
     public void onLogout(Player p){
@@ -42,7 +43,7 @@ public class PlayerTracker {
         long dur = System.currentTimeMillis() - start;
         String message = String.format("[LOGOUT] session=%d sec", dur/1000);
         logSession(uuid, name, message);
-        appendModuleForPlayer(uuid, "info", stamp(message));
+        appendModuleForPlayer(uuid, "players", stamp(message));
     }
 
     public void action(Player p, String text){
@@ -79,7 +80,7 @@ public class PlayerTracker {
         if (low.startsWith("[eco]") || low.startsWith("[economy]")) return "economy";
         if (low.startsWith("[inv]") || low.startsWith("[inventory]")) return "inventory";
         if (low.startsWith("[combat]") || low.contains("killed") || low.contains("death")) return "combat";
-        if (low.startsWith("[info]")) return "info";
+        if (low.startsWith("[info]")) return "players";
         if (low.startsWith("[stat]") || low.startsWith("[stats]")) return "stats";
         return null;
     }
@@ -91,7 +92,10 @@ public class PlayerTracker {
         try {
             String folder = ensureFolders(uuid, null);
             File logsRoot = playersRoot.getParentFile(); // .../logs
-            File dir = new File(new File(new File(logsRoot, category), "players"), folder);
+            File categoryRoot = new File(logsRoot, category);
+            File dir = "players".equals(category)
+                    ? new File(categoryRoot, folder)
+                    : new File(new File(categoryRoot, "players"), folder);
             if (!dir.exists()) dir.mkdirs();
             String day = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
             File f = new File(dir, day + ".log");
