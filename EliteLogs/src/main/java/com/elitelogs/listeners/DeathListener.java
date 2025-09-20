@@ -1,5 +1,7 @@
 package com.elitelogs.listeners;
+
 import com.elitelogs.utils.LogRouter;
+import com.elitelogs.utils.ServerCompat;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
@@ -10,6 +12,7 @@ public class DeathListener implements Listener {
   public DeathListener(LogRouter r){ this.router = r; }
 
   @EventHandler public void onDeath(PlayerDeathEvent e){
-    router.combat(e.getEntity().getUniqueId(), e.getEntity().getName(), "[death-message] " + e.getDeathMessage());
+    String message = ServerCompat.describeDeathMessage(e);
+    router.combat(e.getEntity().getUniqueId(), e.getEntity().getName(), "[death-message] " + message);
   }
 }

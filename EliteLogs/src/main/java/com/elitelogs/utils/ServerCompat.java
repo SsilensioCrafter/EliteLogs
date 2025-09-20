@@ -2,10 +2,11 @@ package com.elitelogs.utils;
 
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
-import org.bukkit.inventory.InventoryView;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -29,6 +30,10 @@ public final class ServerCompat {
     private static boolean inventoryViewTitleResolved;
     private static Method inventoryTitle;
     private static boolean inventoryTitleResolved;
+
+    private static Object plainTextSerializer;
+    private static Method plainTextSerialize;
+    private static boolean plainTextSerializerResolved;
 
     private ServerCompat() {
     }
@@ -260,5 +265,87 @@ public final class ServerCompat {
      */
     public static String describeSupportedRange() {
         return "1.8.x – 1.21.x";
+    }
+
+    /**
+     * Attempts to normalize adventure components into plain text without
+     * introducing a hard dependency on the kyori serializer.
+     */
+    public static String describeComponent(Object component) {
+        if (component == null) {
+            return "";
+        }
+        if (component instanceof String) {
+            return (String) component;
+        }
+        resolvePlainTextSerializer();
+        if (plainTextSerializer != null && plainTextSerialize != null) {
+            try {
+                Object result = plainTextSerialize.invoke(plainTextSerializer, component);
+                if (result instanceof String) {
+                    return (String) result;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return component.toString();
+    }
+
+    /**
+     * Reads the death message across Bukkit API changes (String vs Component).
+     */
+    public static String describeDeathMessage(PlayerDeathEvent event) {
+        if (event == null) {
+            return "unknown";
+        }
+        Object message = invokeDeathMessage(event, "getDeathMessage");
+        if (message == null) {
+            message = invokeDeathMessage(event, "deathMessage");
+        }
+        if (message == null) {
+            return "unknown";
+        }
+        if (message instanceof String) {
+            return (String) message;
+        }
+        return describeComponent(message);
+    }
+
+    private static Object invokeDeathMessage(PlayerDeathEvent event, String methodName) {
+        if (methodName == null || methodName.isEmpty()) {
+            return null;
+        }
+        try {
+            Method method = event.getClass().getMethod(methodName);
+            return method.invoke(event);
+        } catch (NoSuchMethodException ignored) {
+            return null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static synchronized void resolvePlainTextSerializer() {
+        if (plainTextSerializerResolved) {
+            return;
+        }
+        plainTextSerializerResolved = true;
+        try {
+            Class<?> serializerClass = Class.forName("net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer");
+            Method plainText = serializerClass.getMethod("plainText");
+            Object serializer = plainText.invoke(null);
+            if (serializer != null) {
+                for (Method method : serializer.getClass().getMethods()) {
+                    if ("serialize".equals(method.getName()) && method.getParameterTypes().length == 1) {
+                        plainTextSerializer = serializer;
+                        plainTextSerialize = method;
+                        break;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+            plainTextSerializer = null;
+            plainTextSerialize = null;
+        }
     }
 }
