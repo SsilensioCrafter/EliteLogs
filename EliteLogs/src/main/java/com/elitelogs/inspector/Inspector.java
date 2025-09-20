@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.lang.management.ManagementFactory;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.text.SimpleDateFormat;
@@ -102,8 +103,8 @@ public class Inspector {
                 } else {
                     section.list("entries", list -> {
                         for (Object m : mods){
-                            String id = String.valueOf(m.getClass().getMethod("getModId").invoke(m));
-                            String ver = String.valueOf(m.getClass().getMethod("getVersion").invoke(m));
+                            String id = describeModString(m, "getModId");
+                            String ver = describeModString(m, "getVersion");
                             list.item(item -> {
                                 item.scalar("id", id);
                                 item.scalar("version", ver);
@@ -205,6 +206,22 @@ public class Inspector {
                     .replace("{folder}", dir.getName())
                     .replace("{file}", f.getName()));
         }
+    }
+
+    private String describeModString(Object mod, String method) {
+        if (mod == null || method == null || method.isEmpty()) {
+            return "unknown";
+        }
+        try {
+            Method accessor = mod.getClass().getMethod(method);
+            Object result = accessor.invoke(mod);
+            if (result != null) {
+                return String.valueOf(result);
+            }
+        } catch (Throwable t) {
+            plugin.getLogger().log(Level.FINEST, "[EliteLogs] Failed to query mod attribute " + method, t);
+        }
+        return "unknown";
     }
 
     private void writeServerInfo(YamlReportWriter yaml){

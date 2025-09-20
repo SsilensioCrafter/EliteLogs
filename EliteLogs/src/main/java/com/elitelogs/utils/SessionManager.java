@@ -99,7 +99,7 @@ public class SessionManager implements LogRouter.SinkListener {
     private void saveToLogs(SessionSnapshot snapshot) {
         File logsGlobal = new File(plugin.getDataFolder(), "logs/sessions");
         logsGlobal.mkdirs();
-        File target = new File(logsGlobal, snapshot.date() + ".yml");
+        File target = new File(logsGlobal, snapshot.getDate() + ".yml");
         writeSessionReport(target, snapshot);
     }
 
@@ -125,17 +125,50 @@ public class SessionManager implements LogRouter.SinkListener {
     }
 
     private void writeSessionYaml(YamlReportWriter yaml, SessionSnapshot snapshot) {
-        yaml.scalar("date", snapshot.date());
-        yaml.scalar("uptime-seconds", snapshot.uptimeSeconds());
-        yaml.scalar("joins", snapshot.joins());
-        yaml.scalar("warns", snapshot.warns());
-        yaml.scalar("errors", snapshot.errors());
+        yaml.scalar("date", snapshot.getDate());
+        yaml.scalar("uptime-seconds", snapshot.getUptimeSeconds());
+        yaml.scalar("joins", snapshot.getJoins());
+        yaml.scalar("warns", snapshot.getWarns());
+        yaml.scalar("errors", snapshot.getErrors());
     }
 
     public boolean isRunning() {
         return running;
     }
 
-    private record SessionSnapshot(String date, long uptimeSeconds, int joins, int warns, int errors) {
+    private static final class SessionSnapshot {
+        private final String date;
+        private final long uptimeSeconds;
+        private final int joins;
+        private final int warns;
+        private final int errors;
+
+        private SessionSnapshot(String date, long uptimeSeconds, int joins, int warns, int errors) {
+            this.date = date;
+            this.uptimeSeconds = uptimeSeconds;
+            this.joins = joins;
+            this.warns = warns;
+            this.errors = errors;
+        }
+
+        public String getDate() {
+            return date;
+        }
+
+        public long getUptimeSeconds() {
+            return uptimeSeconds;
+        }
+
+        public int getJoins() {
+            return joins;
+        }
+
+        public int getWarns() {
+            return warns;
+        }
+
+        public int getErrors() {
+            return errors;
+        }
     }
 }
