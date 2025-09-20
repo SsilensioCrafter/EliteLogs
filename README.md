@@ -18,6 +18,19 @@
 
 ---
 
+## 📖 Usage
+
+- `/elogs help` → show this help message  
+- `/elogs reload` → reload the plugin configuration  
+- `/elogs inspector` → run the Inspector for quick analysis of sessions, chat, commands, and errors  
+- `/elogs metrics` → display logging metrics and statistics  
+- `/elogs export` → export logs into external-friendly formats  
+- `/elogs rotate [force]` → archive old logs (add `force` to rotate immediately)  
+- `/elogs logs` → list available log categories (chat, commands, sessions, etc.)  
+- `/elogs version` → show the current plugin version  
+
+---
+
 ## ✨ Features
 - Comprehensive logging: chat, commands, economy, combat, inventory, stats, console, sessions, warnings, errors, and more.
 - Per-player logs with dedicated folders (`logs/<module>/players/<uuid>`) and session histories (`logs/players/<playerName>/sessions`).
