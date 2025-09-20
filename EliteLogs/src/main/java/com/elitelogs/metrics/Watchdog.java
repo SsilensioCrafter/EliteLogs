@@ -1,6 +1,9 @@
-package com.elitelogs.utils;
+package com.elitelogs.metrics;
 
 import com.elitelogs.EliteLogsPlugin;
+import com.elitelogs.integration.DiscordAlerter;
+import com.elitelogs.logging.LogRouter;
+import com.elitelogs.reporting.Exporter;
 import org.bukkit.Bukkit;
 import org.bukkit.scheduler.BukkitTask;
 

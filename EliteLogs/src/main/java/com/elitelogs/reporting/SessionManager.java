@@ -1,5 +1,7 @@
-package com.elitelogs.utils;
+package com.elitelogs.reporting;
 
+import com.elitelogs.integration.DiscordAlerter;
+import com.elitelogs.logging.LogRouter;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
@@ -134,6 +136,10 @@ public class SessionManager implements LogRouter.SinkListener {
 
     public boolean isRunning() {
         return running;
+    }
+
+    public void forceSnapshot() {
+        save(false);
     }
 
     private static final class SessionSnapshot {

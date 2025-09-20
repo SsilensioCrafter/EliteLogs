@@ -1,5 +1,8 @@
-package com.elitelogs.utils;
+package com.elitelogs.integration;
 
+import com.elitelogs.compat.ServerCompat;
+import com.elitelogs.logging.LogRouter;
+import com.elitelogs.players.PlayerTracker;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;

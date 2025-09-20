@@ -1,7 +1,7 @@
 package com.elitelogs.listeners;
 
-import com.elitelogs.utils.LogRouter;
-import com.elitelogs.utils.ServerCompat;
+import com.elitelogs.logging.LogRouter;
+import com.elitelogs.compat.ServerCompat;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;

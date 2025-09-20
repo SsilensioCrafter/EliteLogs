@@ -1,4 +1,4 @@
-package com.elitelogs.utils;
+package com.elitelogs.compat;
 
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;

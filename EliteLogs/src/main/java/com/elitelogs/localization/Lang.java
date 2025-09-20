@@ -1,4 +1,4 @@
-package com.elitelogs.utils;
+package com.elitelogs.localization;
 
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.Plugin;

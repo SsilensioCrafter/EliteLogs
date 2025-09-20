@@ -1,8 +1,8 @@
 package com.elitelogs.listeners;
-import com.elitelogs.utils.GeoIPResolver;
-import com.elitelogs.utils.LogRouter;
-import com.elitelogs.utils.PlayerTracker;
-import com.elitelogs.utils.ServerCompat;
+import com.elitelogs.players.GeoIPResolver;
+import com.elitelogs.logging.LogRouter;
+import com.elitelogs.players.PlayerTracker;
+import com.elitelogs.compat.ServerCompat;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;

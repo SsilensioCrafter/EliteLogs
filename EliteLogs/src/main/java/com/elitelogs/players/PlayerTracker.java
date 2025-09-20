@@ -1,5 +1,6 @@
-package com.elitelogs.utils;
+package com.elitelogs.players;
 
+import com.elitelogs.logging.LogRouter;
 import org.bukkit.entity.Player;
 
 import java.io.File;

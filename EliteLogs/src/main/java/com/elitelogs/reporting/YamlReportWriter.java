@@ -1,4 +1,4 @@
-package com.elitelogs.utils;
+package com.elitelogs.reporting;
 
 import java.io.PrintWriter;
 import java.io.Writer;

@@ -1,109 +1,105 @@
 package com.elitelogs;
 
-import com.elitelogs.handlers.EpicCmd;
+import com.elitelogs.bootstrap.DataDirectoryManager;
+import com.elitelogs.bootstrap.InspectorBootstrap;
+import com.elitelogs.bootstrap.ListenerRegistrar;
+import com.elitelogs.bootstrap.LoggingBootstrap;
+import com.elitelogs.bootstrap.LoggingBootstrap.LoggingServices;
+import com.elitelogs.bootstrap.MetricsBootstrap;
+import com.elitelogs.bootstrap.SessionBootstrap;
+import com.elitelogs.commands.EpicCommand;
+import com.elitelogs.commands.ExportSubcommand;
+import com.elitelogs.commands.HelpSubcommand;
+import com.elitelogs.commands.InspectorSubcommand;
+import com.elitelogs.commands.LogsSubcommand;
+import com.elitelogs.commands.MetricsSubcommand;
+import com.elitelogs.commands.ReloadSubcommand;
+import com.elitelogs.commands.RotateSubcommand;
+import com.elitelogs.commands.SessionSubcommand;
+import com.elitelogs.commands.VersionSubcommand;
+import com.elitelogs.compat.ServerCompat;
 import com.elitelogs.inspector.Inspector;
-import com.elitelogs.listeners.*;
-import com.elitelogs.utils.*;
-import org.bukkit.Bukkit;
+import com.elitelogs.integration.DiscordAlerter;
+import com.elitelogs.integration.VaultEconomyTracker;
+import com.elitelogs.localization.Lang;
+import com.elitelogs.logging.ConsoleHook;
+import com.elitelogs.logging.ConsoleTee;
+import com.elitelogs.logging.LogRouter;
+import com.elitelogs.metrics.MetricsCollector;
+import com.elitelogs.metrics.Watchdog;
+import com.elitelogs.players.PlayerTracker;
+import com.elitelogs.reporting.SessionManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 public class EliteLogsPlugin extends JavaPlugin {
 
     private Lang lang;
-    private LogRouter logRouter;
-    private ConsoleHook consoleHook; private ConsoleTee consoleTee;
-    private MetricsCollector metricsCollector; private VaultEconomyTracker eco;
-    private Watchdog watchdog;
-    private SessionManager sessionManager;
+    private DataDirectoryManager dataDirectories;
     private PlayerTracker playerTracker;
+    private LoggingBootstrap loggingBootstrap;
+    private LoggingServices loggingServices;
+    private LogRouter logRouter;
+    private ConsoleHook consoleHook;
+    private ConsoleTee consoleTee;
+    private MetricsBootstrap metricsBootstrap;
+    private MetricsCollector metricsCollector;
+    private VaultEconomyTracker economyTracker;
+    private Watchdog watchdog;
+    private SessionBootstrap sessionBootstrap;
+    private SessionManager sessionManager;
+    private InspectorBootstrap inspectorBootstrap;
     private Inspector inspector;
+    private ListenerRegistrar listenerRegistrar;
 
     @Override
     public void onEnable() {
         safeLoadConfig();
 
-        // Lang + folders
-        this.lang = new Lang(this); lang.load();
-        createFolderTree();
+        this.lang = new Lang(this);
+        lang.load();
+
+        this.dataDirectories = new DataDirectoryManager(this);
+        dataDirectories.ensureStructure();
+
+        this.playerTracker = new PlayerTracker(getDataFolder());
 
         getLogger().info("[EliteLogs] Server version: " + ServerCompat.describeServerVersion());
         getLogger().info("[EliteLogs] Compatibility range: " + ServerCompat.describeSupportedRange());
 
-        if (getConfig().getBoolean("banner.enabled", true)) {
-            AsciiBanner.print(
-                    getLogger(),
-                    getDescription().getVersion(),
-                    getConfig().getString("banner.style", "block"),
-                    getConfig().getString("banner.color", "default"),
-                    getConfig().getBoolean("banner.show-version", true)
-            );
-        }
+        this.loggingBootstrap = new LoggingBootstrap(this);
+        this.loggingServices = loggingBootstrap.start(playerTracker);
+        this.logRouter = loggingServices.router();
+        this.consoleHook = loggingServices.hook();
+        this.consoleTee = loggingServices.tee();
 
-        this.logRouter = new LogRouter(this);
-        this.playerTracker = new PlayerTracker(getDataFolder());
-        this.logRouter.setPlayerTracker(playerTracker);
-        this.consoleHook = new ConsoleHook(logRouter);
-        consoleHook.hook();
-        this.consoleTee = new ConsoleTee(logRouter);
-        consoleTee.setPreferLog4j(consoleHook.isLog4jAttached());
-        consoleTee.hook();
         DiscordAlerter.init(this);
 
-        // Listeners
-        if (getConfig().getBoolean("logs.types.chat", true)) Bukkit.getPluginManager().registerEvents(new ChatListener(logRouter, playerTracker), this);
-        if (getConfig().getBoolean("logs.types.commands", true)) Bukkit.getPluginManager().registerEvents(new CommandListener(this, logRouter, playerTracker), this);
-        if (getConfig().getBoolean("logs.types.combat", true)) Bukkit.getPluginManager().registerEvents(new DeathListener(logRouter), this);
-        if (getConfig().getBoolean("logs.types.players", true)) Bukkit.getPluginManager().registerEvents(new JoinQuitListener(logRouter, playerTracker), this);
-        if (getConfig().getBoolean("logs.types.combat", true)) Bukkit.getPluginManager().registerEvents(new CombatListener(logRouter), this);
-        if (getConfig().getBoolean("logs.types.inventory", true)) {
-            InventoryListener inventoryListener = new InventoryListener(logRouter, playerTracker);
-            Bukkit.getPluginManager().registerEvents(inventoryListener, this);
-            inventoryListener.registerCompatibilityListeners(this);
-        }
-        if (getConfig().getBoolean("logs.types.economy", true)) Bukkit.getPluginManager().registerEvents(new EconomyListener(), this);
-        if (getConfig().getBoolean("logs.types.rcon", true)) Bukkit.getPluginManager().registerEvents(new RconListener(logRouter), this);
+        this.listenerRegistrar = new ListenerRegistrar(this, logRouter, playerTracker);
+        listenerRegistrar.registerAll();
 
-        // Metrics + Watchdog + Economy
-        this.metricsCollector = new MetricsCollector(this, logRouter); this.eco = new VaultEconomyTracker(this, logRouter, playerTracker);
-        if (getConfig().getBoolean("metrics.enabled", true)) metricsCollector.start(); if (getConfig().getBoolean("logs.types.economy", true)) eco.start();
+        this.metricsBootstrap = new MetricsBootstrap(this);
+        metricsBootstrap.start(logRouter, playerTracker);
+        this.metricsCollector = metricsBootstrap.getMetricsCollector();
+        this.economyTracker = metricsBootstrap.getEconomyTracker();
+        this.watchdog = metricsBootstrap.getWatchdog();
 
-        this.watchdog = new Watchdog(this, logRouter, metricsCollector);
-        if (getConfig().getBoolean("watchdog.enabled", true)) watchdog.start();
+        this.sessionBootstrap = new SessionBootstrap(this);
+        this.sessionManager = sessionBootstrap.start(logRouter);
 
-        // Sessions
-        this.sessionManager = new SessionManager(this, logRouter);
-        if (getConfig().getBoolean("sessions.enabled", true)) sessionManager.begin();
+        this.inspectorBootstrap = new InspectorBootstrap(this, lang);
+        this.inspector = inspectorBootstrap.start();
 
-        // Inspector
-        this.inspector = new Inspector(this, lang);
-        if (getConfig().getBoolean("inspector.enabled", true)) {
-            // delay to allow other plugins finish enabling
-            getServer().getScheduler().runTaskLater(this, inspector::runAll, 20L * 10);
-        }
+        registerCommands();
 
-        // Commands
-        EpicCmd cmd = new EpicCmd(this, lang, logRouter, metricsCollector, inspector, sessionManager);
-        if (getCommand("epiclogs") != null) {
-            getCommand("epiclogs").setExecutor(cmd);
-            getCommand("epiclogs").setTabCompleter(cmd);
-        }
-
-        showLastSessionSummary();
+        dataDirectories.logLastSessionSummary();
         printModules();
 
         getLogger().info(Lang.colorize(lang.get("plugin-enabled").replace("{version}", getDescription().getVersion())));
@@ -111,74 +107,37 @@ public class EliteLogsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        if (metricsCollector != null) metricsCollector.stop(); if (eco != null) eco.stop();
-        if (watchdog != null) watchdog.stop();
-        if (consoleHook != null) consoleHook.unhook(); if (consoleTee != null) consoleTee.unhook();
-        if (sessionManager != null && sessionManager.isRunning()) sessionManager.end();
-        if (logRouter != null) logRouter.shutdown();
+        if (metricsBootstrap != null) {
+            metricsBootstrap.shutdown();
+        }
+        if (sessionBootstrap != null) {
+            sessionBootstrap.shutdown();
+        }
+        if (loggingBootstrap != null) {
+            loggingBootstrap.shutdown();
+        }
         getLogger().info(Lang.colorize(lang.get("plugin-disabled")));
     }
 
-    private void showLastSessionSummary() {
-        try {
-            File f = new File(getDataFolder(), "reports/sessions/last-session.yml");
-            if (f.exists()) {
-                getLogger().info("=== Last Session Summary ===");
-                Map<String, String> summary = new LinkedHashMap<>();
-                List<String> rawLines = new ArrayList<>();
-                try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f), StandardCharsets.UTF_8))) {
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        rawLines.add(line);
-                        String trimmed = line.trim();
-                        if (trimmed.isEmpty() || trimmed.startsWith("#")) {
-                            continue;
-                        }
-                        int colon = trimmed.indexOf(':');
-                        if (colon <= 0) {
-                            continue;
-                        }
-                        String key = trimmed.substring(0, colon).trim();
-                        String value = trimmed.substring(colon + 1).trim();
-                        summary.put(key, stripYamlQuotes(value));
-                    }
-                }
-                if (!summary.isEmpty()) {
-                    summary.entrySet().stream().limit(12).forEach(entry ->
-                            getLogger().info(entry.getKey() + ": " + entry.getValue()));
-                } else {
-                    rawLines.stream().limit(12).forEach(getLogger()::info);
-                }
-            }
-        } catch (Exception ignored){}
-    }
-
-    private String stripYamlQuotes(String value) {
-        if (value == null) {
-            return "";
-        }
-        String trimmed = value.trim();
-        if ((trimmed.startsWith("\"") && trimmed.endsWith("\""))
-                || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-            return trimmed.substring(1, trimmed.length() - 1);
-        }
-        return trimmed;
-    }
-
-    private void createFolderTree() {
-        File data = getDataFolder();
-        if (!data.exists()) {
-            data.mkdirs();
-        }
-        List<String> folders = Arrays.asList(
-                "logs/info","logs/warns","logs/errors","logs/chat","logs/commands","logs/players",
-                "logs/combat","logs/inventory","logs/economy","logs/stats","logs/console","logs/rcon","logs/suppressed",
-                "reports/sessions","reports/inspector",
-                "archive","exports","lang"
+    private void registerCommands() {
+        HelpSubcommand help = new HelpSubcommand(this, lang);
+        EpicCommand epic = new EpicCommand(
+                lang,
+                help,
+                Arrays.asList(
+                        new ReloadSubcommand(this, lang, logRouter),
+                        new VersionSubcommand(this, lang),
+                        new MetricsSubcommand(this, lang, metricsCollector),
+                        new RotateSubcommand(this, lang, logRouter),
+                        new ExportSubcommand(this, lang),
+                        new InspectorSubcommand(this, lang, inspector),
+                        new LogsSubcommand(this, lang),
+                        new SessionSubcommand(this, lang, sessionManager)
+                )
         );
-        for (String path : folders) {
-            File f = new File(data, path);
-            if (!f.exists()) f.mkdirs();
+        if (getCommand("epiclogs") != null) {
+            getCommand("epiclogs").setExecutor(epic);
+            getCommand("epiclogs").setTabCompleter(epic);
         }
     }
 

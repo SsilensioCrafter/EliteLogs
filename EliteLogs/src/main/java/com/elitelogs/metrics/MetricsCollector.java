@@ -1,5 +1,7 @@
-package com.elitelogs.utils;
+package com.elitelogs.metrics;
 
+import com.elitelogs.compat.ServerCompat;
+import com.elitelogs.logging.LogRouter;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;

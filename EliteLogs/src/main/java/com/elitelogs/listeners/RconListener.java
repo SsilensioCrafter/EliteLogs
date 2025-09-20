@@ -1,6 +1,6 @@
 package com.elitelogs.listeners;
 
-import com.elitelogs.utils.LogRouter;
+import com.elitelogs.logging.LogRouter;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.RemoteConsoleCommandSender;
 import org.bukkit.event.EventHandler;

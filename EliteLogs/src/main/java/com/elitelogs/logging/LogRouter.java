@@ -1,5 +1,7 @@
-package com.elitelogs.utils;
+package com.elitelogs.logging;
 
+import com.elitelogs.integration.DiscordAlerter;
+import com.elitelogs.players.PlayerTracker;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.Plugin;
 

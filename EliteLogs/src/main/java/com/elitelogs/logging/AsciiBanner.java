@@ -1,4 +1,6 @@
-package com.elitelogs.utils;
+package com.elitelogs.logging;
+
+import com.elitelogs.localization.Lang;
 
 import java.util.Locale;
 import java.util.logging.Logger;

@@ -1,6 +1,6 @@
 package com.elitelogs.listeners;
-import com.elitelogs.utils.LogRouter;
-import com.elitelogs.utils.ServerCompat;
+import com.elitelogs.logging.LogRouter;
+import com.elitelogs.compat.ServerCompat;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;

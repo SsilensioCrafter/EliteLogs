@@ -1,9 +1,9 @@
 package com.elitelogs.inspector;
 
 import com.elitelogs.EliteLogsPlugin;
-import com.elitelogs.utils.DiscordAlerter;
-import com.elitelogs.utils.Lang;
-import com.elitelogs.utils.YamlReportWriter;
+import com.elitelogs.integration.DiscordAlerter;
+import com.elitelogs.localization.Lang;
+import com.elitelogs.reporting.YamlReportWriter;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
 
