@@ -1,14 +1,21 @@
 package com.elitelogs.utils;
 
 import org.bukkit.Bukkit;
-import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.scheduler.BukkitTask;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
 
 public class SessionManager implements LogRouter.SinkListener {
     private final Plugin plugin;
@@ -71,24 +78,11 @@ public class SessionManager implements LogRouter.SinkListener {
         int joinCount = joins.get();
         int warnCount = warns.get();
         int errorCount = errors.get();
-
-        File f = new File(folder, date + ".yml");
-        try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream(f), StandardCharsets.UTF_8))){
-            writeSessionYaml(pw, date, uptimeSeconds, joinCount, warnCount, errorCount);
-        } catch (Exception ignored){}
-        // PATCHED3: write also to logs/sessions/global
-        saveToLogs(uptimeSeconds, date, joinCount, warnCount, errorCount);
-        try {
-            File last = new File(folder, "last-session.yml");
-            try (InputStream in = new FileInputStream(f);
-                 OutputStream out = new FileOutputStream(last)) {
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = in.read(buffer)) != -1) {
-                    out.write(buffer, 0, read);
-                }
-            }
-        } catch(Exception ignored){}
+        SessionSnapshot snapshot = new SessionSnapshot(date, uptimeSeconds, joinCount, warnCount, errorCount);
+        File report = new File(folder, date + ".yml");
+        writeSessionReport(report, snapshot);
+        saveToLogs(snapshot);
+        updateLastSessionSnapshot(report, new File(folder, "last-session.yml"));
     }
 
     @Override
@@ -102,25 +96,46 @@ public class SessionManager implements LogRouter.SinkListener {
     }
 
 
-    // === PATCH: also save to logs/sessions/global ===
-    private void saveToLogs(long uptimeSeconds, String date, int joinCount, int warnCount, int errorCount) {
-        java.io.File logsGlobal = new java.io.File(plugin.getDataFolder(), "logs/sessions");
+    private void saveToLogs(SessionSnapshot snapshot) {
+        File logsGlobal = new File(plugin.getDataFolder(), "logs/sessions");
         logsGlobal.mkdirs();
-        java.io.File g = new java.io.File(logsGlobal, date + ".yml");
-        try (java.io.PrintWriter pw = new java.io.PrintWriter(new java.io.OutputStreamWriter(new java.io.FileOutputStream(g), java.nio.charset.StandardCharsets.UTF_8))){
-            writeSessionYaml(pw, date, uptimeSeconds, joinCount, warnCount, errorCount);
-        } catch (Exception ignored){}
+        File target = new File(logsGlobal, snapshot.date() + ".yml");
+        writeSessionReport(target, snapshot);
     }
 
-    private void writeSessionYaml(PrintWriter pw, String date, long uptimeSeconds, int joinCount, int warnCount, int errorCount) {
-        pw.println("date: \"" + date + "\"");
-        pw.println("uptime-seconds: " + uptimeSeconds);
-        pw.println("joins: " + joinCount);
-        pw.println("warns: " + warnCount);
-        pw.println("errors: " + errorCount);
+    private void writeSessionReport(File target, SessionSnapshot snapshot) {
+        try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream(target), StandardCharsets.UTF_8))) {
+            YamlReportWriter yaml = new YamlReportWriter(pw);
+            writeSessionYaml(yaml, snapshot);
+            yaml.flush();
+        } catch (IOException ex) {
+            plugin.getLogger().log(Level.WARNING, "[EliteLogs] Failed to write session report " + target.getName(), ex);
+        }
+    }
+
+    private void updateLastSessionSnapshot(File source, File destination) {
+        if (source == null || !source.exists()) {
+            return;
+        }
+        try {
+            Files.copy(source.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException ex) {
+            plugin.getLogger().log(Level.WARNING, "[EliteLogs] Failed to update last session snapshot", ex);
+        }
+    }
+
+    private void writeSessionYaml(YamlReportWriter yaml, SessionSnapshot snapshot) {
+        yaml.scalar("date", snapshot.date());
+        yaml.scalar("uptime-seconds", snapshot.uptimeSeconds());
+        yaml.scalar("joins", snapshot.joins());
+        yaml.scalar("warns", snapshot.warns());
+        yaml.scalar("errors", snapshot.errors());
     }
 
     public boolean isRunning() {
         return running;
+    }
+
+    private record SessionSnapshot(String date, long uptimeSeconds, int joins, int warns, int errors) {
     }
 }
