@@ -33,7 +33,7 @@ public class Inspector {
 
     public void runAll(){
         String ts = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
-        File f = new File(outDir, "inspector-report-" + ts + ".txt");
+        File f = new File(outDir, "inspector-report-" + ts + ".yml");
         try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream(f), StandardCharsets.UTF_8))){
             writePlugins(pw); writeMods(pw); writeConfigs(pw); writeGarbage(pw); writeServerInfo(pw);
             DiscordAlerter.maybeSend("inspector","Inspector report updated: " + f.getName());
@@ -41,43 +41,67 @@ public class Inspector {
     }
 
     private void writePlugins(PrintWriter pw){
-        pw.println(t("inspector.plugins-header"));
+        pw.println("plugins:");
+        pw.println("  header: " + quote(t("inspector.plugins-header")));
         Plugin[] ps = Bukkit.getPluginManager().getPlugins();
+        if (ps.length == 0) {
+            pw.println("  entries: []");
+            pw.println();
+            return;
+        }
+        pw.println("  entries:");
         for (Plugin p : ps){
             String ver = (p.getDescription()!=null && p.getDescription().getVersion()!=null && !p.getDescription().getVersion().isEmpty())
                     ? p.getDescription().getVersion() : t("inspector.plugins-version-unknown");
             String state = p.isEnabled() ? t("inspector.plugins-enabled") : t("inspector.plugins-disabled");
-            String line = t("inspector.plugins-format")
-                    .replace("{name}", p.getName())
-                    .replace("{state}", state)
-                    .replace("{version}", ver);
-            pw.println(line);
+            pw.println("    - name: " + quote(p.getName()));
+            pw.println("      state: " + quote(state));
+            pw.println("      version: " + quote(ver));
         }
         pw.println();
     }
 
     private void writeMods(PrintWriter pw){
-        if (!plugin.getConfig().getBoolean("inspector.include-mods", true)) return;
-        pw.println(t("inspector.mods-header"));
+        boolean include = plugin.getConfig().getBoolean("inspector.include-mods", true);
+        pw.println("mods:");
+        pw.println("  header: " + quote(t("inspector.mods-header")));
+        pw.println("  included: " + include);
+        if (!include) {
+            pw.println();
+            return;
+        }
         try {
             Class<?> modList = Class.forName("net.minecraftforge.fml.ModList");
             Object inst = modList.getMethod("get").invoke(null);
             Collection<?> mods = (Collection<?>) modList.getMethod("getMods").invoke(inst);
-            for (Object m : mods){
-                String id = String.valueOf(m.getClass().getMethod("getModId").invoke(m));
-                String ver = String.valueOf(m.getClass().getMethod("getVersion").invoke(m));
-                pw.println(id + "\t" + ver);
+            if (mods == null || mods.isEmpty()) {
+                pw.println("  entries: []");
+            } else {
+                pw.println("  entries:");
+                for (Object m : mods){
+                    String id = String.valueOf(m.getClass().getMethod("getModId").invoke(m));
+                    String ver = String.valueOf(m.getClass().getMethod("getVersion").invoke(m));
+                    pw.println("    - id: " + quote(id));
+                    pw.println("      version: " + quote(ver));
+                }
             }
         } catch (Throwable t){
-            pw.println(t("inspector.mods-missing"));
+            pw.println("  error: " + quote(t("inspector.mods-missing")));
         }
         pw.println();
     }
 
     private void writeConfigs(PrintWriter pw){
-        if (!plugin.getConfig().getBoolean("inspector.include-configs", true)) return;
+        boolean include = plugin.getConfig().getBoolean("inspector.include-configs", true);
         List<String> okExt = Arrays.asList(".yml",".yaml",".json",".toml",".cfg");
-        pw.println(t("inspector.configs-header"));
+        pw.println("configs:");
+        pw.println("  header: " + quote(t("inspector.configs-header")));
+        pw.println("  included: " + include);
+        if (!include) {
+            pw.println();
+            return;
+        }
+        List<String[]> entries = new ArrayList<>();
         for (File dir : new File[]{configDir, serverConfigDir}){
             if (dir == null || !dir.exists()) continue;
             try {
@@ -94,36 +118,57 @@ public class Inspector {
                             .anyMatch(pl -> pl.getName().equalsIgnoreCase(base));
                     if (!pluginExists && okExt.contains(ext)) status = t("inspector.configs-status-orphaned");
                     try {
-                        String line = t("inspector.configs-format")
-                                .replace("{folder}", dir.getName())
-                                .replace("{path}", rel)
-                                .replace("{status}", status);
-                        pw.println(line);
+                        entries.add(new String[]{dir.getName(), rel, status});
                     } catch(Exception ignored){}
                 });
             } catch (Exception ignored){}
         }
-        pw.println();
-    }
-
-    private void writeGarbage(PrintWriter pw){
-        if (!plugin.getConfig().getBoolean("inspector.include-garbage", true)) return;
-        pw.println(t("inspector.garbage-header"));
-        scanGarbage(pw, new File(serverRoot, "plugins"), ".jar");
-        scanGarbage(pw, new File(serverRoot, "mods"), ".jar");
-        scanGarbage(pw, configDir, ".yml",".yaml",".json",".toml",".cfg");
-        scanGarbage(pw, serverConfigDir, ".yml",".yaml",".json",".toml",".cfg");
-        File[] files = serverRoot.listFiles();
-        if (files != null) for (File x : files){
-            String n = x.getName().toLowerCase(Locale.ROOT);
-            if (n.endsWith(".zip") || n.endsWith(".rar") || n.endsWith(".old") || n.endsWith(".log")){
-                pw.println(t("inspector.garbage-root").replace("{name}", x.getName()));
+        if (entries.isEmpty()) {
+            pw.println("  entries: []");
+        } else {
+            pw.println("  entries:");
+            for (String[] entry : entries) {
+                pw.println("    - folder: " + quote(entry[0]));
+                pw.println("      path: " + quote(entry[1]));
+                pw.println("      status: " + quote(entry[2]));
             }
         }
         pw.println();
     }
 
-    private void scanGarbage(PrintWriter pw, File dir, String... goodExts){
+    private void writeGarbage(PrintWriter pw){
+        boolean include = plugin.getConfig().getBoolean("inspector.include-garbage", true);
+        pw.println("garbage:");
+        pw.println("  header: " + quote(t("inspector.garbage-header")));
+        pw.println("  included: " + include);
+        if (!include) {
+            pw.println();
+            return;
+        }
+        List<String> entries = new ArrayList<>();
+        scanGarbage(entries, new File(serverRoot, "plugins"), ".jar");
+        scanGarbage(entries, new File(serverRoot, "mods"), ".jar");
+        scanGarbage(entries, configDir, ".yml",".yaml",".json",".toml",".cfg");
+        scanGarbage(entries, serverConfigDir, ".yml",".yaml",".json",".toml",".cfg");
+        File[] files = serverRoot.listFiles();
+        if (files != null) for (File x : files){
+            String n = x.getName().toLowerCase(Locale.ROOT);
+            if (n.endsWith(".zip") || n.endsWith(".rar") || n.endsWith(".old") || n.endsWith(".log")){
+                entries.add(t("inspector.garbage-root").replace("{name}", x.getName()));
+            }
+        }
+        if (entries.isEmpty()) {
+            pw.println("  entries: []");
+        } else {
+            pw.println("  entries:");
+            for (String entry : entries) {
+                pw.println("    - " + quote(entry));
+            }
+        }
+        pw.println();
+    }
+
+    private void scanGarbage(List<String> target, File dir, String... goodExts){
         if (dir == null || !dir.exists()) return;
         Set<String> ok = new HashSet<>(Arrays.asList(goodExts));
         File[] files = dir.listFiles(); if (files == null) return;
@@ -131,24 +176,39 @@ public class Inspector {
             if (f.isDirectory()) continue;
             String n = f.getName().toLowerCase(Locale.ROOT);
             String ext = n.contains(".") ? n.substring(n.lastIndexOf(".")) : "";
-            if (!ok.contains(ext)) pw.println(t("inspector.garbage-entry")
+            if (!ok.contains(ext)) target.add(t("inspector.garbage-entry")
                     .replace("{folder}", dir.getName())
                     .replace("{file}", f.getName()));
         }
     }
 
     private void writeServerInfo(PrintWriter pw){
-        if (!plugin.getConfig().getBoolean("inspector.include-server-info", true)) return;
-        pw.println(t("inspector.server-header"));
-        pw.println(t("inspector.server-bukkit").replace("{value}", Bukkit.getVersion()));
-        pw.println(t("inspector.server-mc").replace("{value}", Bukkit.getBukkitVersion()));
-        pw.println(t("inspector.server-java").replace("{value}", System.getProperty("java.version")));
-        pw.println(t("inspector.server-os").replace("{value}", System.getProperty("os.name") + " " + System.getProperty("os.version")));
-        pw.println(t("inspector.server-cpu").replace("{value}", String.valueOf(ManagementFactory.getOperatingSystemMXBean().getAvailableProcessors())));
+        boolean include = plugin.getConfig().getBoolean("inspector.include-server-info", true);
+        pw.println("server:");
+        pw.println("  header: " + quote(t("inspector.server-header")));
+        pw.println("  included: " + include);
+        if (!include) {
+            pw.println();
+            return;
+        }
+        pw.println("  details:");
+        pw.println("    bukkit: " + quote(Bukkit.getVersion()));
+        pw.println("    minecraft: " + quote(Bukkit.getBukkitVersion()));
+        pw.println("    java: " + quote(System.getProperty("java.version")));
+        pw.println("    os: " + quote(System.getProperty("os.name") + " " + System.getProperty("os.version")));
+        pw.println("    cpu-cores: " + quote(String.valueOf(ManagementFactory.getOperatingSystemMXBean().getAvailableProcessors())));
         pw.println();
     }
 
     private String t(String key){
         return lang.get(key);
+    }
+
+    private String quote(String value) {
+        if (value == null) {
+            return "null";
+        }
+        String sanitized = value.replace("\\", "\\\\").replace("\"", "\\\"");
+        return "\"" + sanitized + "\"";
     }
 }

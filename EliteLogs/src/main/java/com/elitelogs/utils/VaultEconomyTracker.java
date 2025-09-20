@@ -107,7 +107,7 @@ public class VaultEconomyTracker {
             }
             warnedNoAccessor = false;
             boolean errorLogged = false;
-            for (Player p : Bukkit.getOnlinePlayers()){
+            for (Player p : ServerCompat.getOnlinePlayers()){
                 try {
                     double bal = accessor.get(p);
                     Double prev = last.put(p.getUniqueId(), bal);

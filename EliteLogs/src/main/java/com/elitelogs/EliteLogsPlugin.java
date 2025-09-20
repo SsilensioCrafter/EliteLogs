@@ -9,8 +9,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import java.io.File;
 import java.io.Writer;
@@ -38,6 +41,9 @@ public class EliteLogsPlugin extends JavaPlugin {
         this.lang = new Lang(this); lang.load();
         createFolderTree();
 
+        getLogger().info("[EliteLogs] Server version: " + ServerCompat.describeServerVersion());
+        getLogger().info("[EliteLogs] Compatibility range: " + ServerCompat.describeSupportedRange());
+
         if (getConfig().getBoolean("banner.enabled", true)) {
             AsciiBanner.print(
                     getLogger(),
@@ -64,7 +70,11 @@ public class EliteLogsPlugin extends JavaPlugin {
         if (getConfig().getBoolean("logs.types.combat", true)) Bukkit.getPluginManager().registerEvents(new DeathListener(logRouter), this);
         if (getConfig().getBoolean("logs.types.players", true)) Bukkit.getPluginManager().registerEvents(new JoinQuitListener(logRouter, playerTracker), this);
         if (getConfig().getBoolean("logs.types.combat", true)) Bukkit.getPluginManager().registerEvents(new CombatListener(logRouter), this);
-        if (getConfig().getBoolean("logs.types.inventory", true)) Bukkit.getPluginManager().registerEvents(new InventoryListener(logRouter, playerTracker), this);
+        if (getConfig().getBoolean("logs.types.inventory", true)) {
+            InventoryListener inventoryListener = new InventoryListener(logRouter, playerTracker);
+            Bukkit.getPluginManager().registerEvents(inventoryListener, this);
+            inventoryListener.registerCompatibilityListeners(this);
+        }
         if (getConfig().getBoolean("logs.types.economy", true)) Bukkit.getPluginManager().registerEvents(new EconomyListener(), this);
         if (getConfig().getBoolean("logs.types.rcon", true)) Bukkit.getPluginManager().registerEvents(new RconListener(logRouter), this);
 
@@ -111,15 +121,48 @@ public class EliteLogsPlugin extends JavaPlugin {
 
     private void showLastSessionSummary() {
         try {
-            File f = new File(getDataFolder(), "reports/sessions/last-session.txt");
+            File f = new File(getDataFolder(), "reports/sessions/last-session.yml");
             if (f.exists()) {
                 getLogger().info("=== Last Session Summary ===");
+                Map<String, String> summary = new LinkedHashMap<>();
+                List<String> rawLines = new ArrayList<>();
                 try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f), StandardCharsets.UTF_8))) {
-                    String line; int i=0;
-                    while ((line = br.readLine()) != null && i++ < 12) getLogger().info(line);
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        rawLines.add(line);
+                        String trimmed = line.trim();
+                        if (trimmed.isEmpty() || trimmed.startsWith("#")) {
+                            continue;
+                        }
+                        int colon = trimmed.indexOf(':');
+                        if (colon <= 0) {
+                            continue;
+                        }
+                        String key = trimmed.substring(0, colon).trim();
+                        String value = trimmed.substring(colon + 1).trim();
+                        summary.put(key, stripYamlQuotes(value));
+                    }
+                }
+                if (!summary.isEmpty()) {
+                    summary.entrySet().stream().limit(12).forEach(entry ->
+                            getLogger().info(entry.getKey() + ": " + entry.getValue()));
+                } else {
+                    rawLines.stream().limit(12).forEach(getLogger()::info);
                 }
             }
         } catch (Exception ignored){}
+    }
+
+    private String stripYamlQuotes(String value) {
+        if (value == null) {
+            return "";
+        }
+        String trimmed = value.trim();
+        if ((trimmed.startsWith("\"") && trimmed.endsWith("\""))
+                || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+            return trimmed.substring(1, trimmed.length() - 1);
+        }
+        return trimmed;
     }
 
     private void createFolderTree() {

@@ -67,18 +67,19 @@ public class SessionManager implements LogRouter.SinkListener {
         String date = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
         File folder = new File(plugin.getDataFolder(), "reports/sessions");
         folder.mkdirs();
-        File f = new File(folder, date + ".txt");
+        long uptimeSeconds = dur / 1000;
+        int joinCount = joins.get();
+        int warnCount = warns.get();
+        int errorCount = errors.get();
+
+        File f = new File(folder, date + ".yml");
         try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream(f), StandardCharsets.UTF_8))){
-            pw.println("Session date: " + date);
-            pw.println("Uptime: " + dur/1000 + " sec");
-            pw.println("Joins: " + joins.get());
-            pw.println("Warns: " + warns.get());
-            pw.println("Errors: " + errors.get());
+            writeSessionYaml(pw, date, uptimeSeconds, joinCount, warnCount, errorCount);
         } catch (Exception ignored){}
         // PATCHED3: write also to logs/sessions/global
-        saveToLogs(dur, date);
+        saveToLogs(uptimeSeconds, date, joinCount, warnCount, errorCount);
         try {
-            File last = new File(folder, "last-session.txt");
+            File last = new File(folder, "last-session.yml");
             try (InputStream in = new FileInputStream(f);
                  OutputStream out = new FileOutputStream(last)) {
                 byte[] buffer = new byte[8192];
@@ -102,13 +103,21 @@ public class SessionManager implements LogRouter.SinkListener {
 
 
     // === PATCH: also save to logs/sessions/global ===
-    private void saveToLogs(long dur, String date) {
+    private void saveToLogs(long uptimeSeconds, String date, int joinCount, int warnCount, int errorCount) {
         java.io.File logsGlobal = new java.io.File(plugin.getDataFolder(), "logs/sessions");
         logsGlobal.mkdirs();
-        java.io.File g = new java.io.File(logsGlobal, date + ".txt");
+        java.io.File g = new java.io.File(logsGlobal, date + ".yml");
         try (java.io.PrintWriter pw = new java.io.PrintWriter(new java.io.OutputStreamWriter(new java.io.FileOutputStream(g), java.nio.charset.StandardCharsets.UTF_8))){
-            pw.println("Uptime=" + dur/1000 + "s joins=" + joins.get() + " warns=" + warns.get() + " errors=" + errors.get());
+            writeSessionYaml(pw, date, uptimeSeconds, joinCount, warnCount, errorCount);
         } catch (Exception ignored){}
+    }
+
+    private void writeSessionYaml(PrintWriter pw, String date, long uptimeSeconds, int joinCount, int warnCount, int errorCount) {
+        pw.println("date: \"" + date + "\"");
+        pw.println("uptime-seconds: " + uptimeSeconds);
+        pw.println("joins: " + joinCount);
+        pw.println("warns: " + warnCount);
+        pw.println("errors: " + errorCount);
     }
 
     public boolean isRunning() {

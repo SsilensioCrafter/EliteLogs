@@ -2,6 +2,7 @@ package com.elitelogs.listeners;
 import com.elitelogs.utils.GeoIPResolver;
 import com.elitelogs.utils.LogRouter;
 import com.elitelogs.utils.PlayerTracker;
+import com.elitelogs.utils.ServerCompat;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -25,7 +26,7 @@ public class JoinQuitListener implements Listener {
 
         router.info(p.getUniqueId(), p.getName(), "[join] ip=" + ip + " region=" + region + brandPart);
         router.write("stats", String.format("[online] join player=%s uuid=%s now=%d", p.getName(), p.getUniqueId(),
-                org.bukkit.Bukkit.getOnlinePlayers().size()));
+                ServerCompat.getOnlinePlayerCount()));
 
         if (tracker != null) tracker.onLogin(p, ip + " " + region + brandPart);
 
@@ -37,7 +38,7 @@ public class JoinQuitListener implements Listener {
         if (tracker != null) tracker.onLogout(p);
         router.info(p.getUniqueId(), p.getName(), "[quit]");
         router.player(p.getUniqueId(), p.getName(), "[logout]");
-        int remaining = Math.max(0, org.bukkit.Bukkit.getOnlinePlayers().size() - 1);
+        int remaining = Math.max(0, ServerCompat.getOnlinePlayerCount() - 1);
         router.write("stats", String.format("[online] quit player=%s uuid=%s now=%d", p.getName(), p.getUniqueId(), remaining));
     }
 
