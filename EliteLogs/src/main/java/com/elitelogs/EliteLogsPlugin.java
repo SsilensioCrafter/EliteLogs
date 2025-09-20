@@ -7,7 +7,7 @@ import com.elitelogs.bootstrap.LoggingBootstrap;
 import com.elitelogs.bootstrap.LoggingBootstrap.LoggingServices;
 import com.elitelogs.bootstrap.MetricsBootstrap;
 import com.elitelogs.bootstrap.SessionBootstrap;
-import com.elitelogs.commands.EpicCommand;
+import com.elitelogs.commands.EliteLogsCommand;
 import com.elitelogs.commands.ExportSubcommand;
 import com.elitelogs.commands.HelpSubcommand;
 import com.elitelogs.commands.InspectorSubcommand;
@@ -121,7 +121,7 @@ public class EliteLogsPlugin extends JavaPlugin {
 
     private void registerCommands() {
         HelpSubcommand help = new HelpSubcommand(this, lang);
-        EpicCommand epic = new EpicCommand(
+        EliteLogsCommand elite = new EliteLogsCommand(
                 lang,
                 help,
                 Arrays.asList(
@@ -135,9 +135,9 @@ public class EliteLogsPlugin extends JavaPlugin {
                         new SessionSubcommand(this, lang, sessionManager)
                 )
         );
-        if (getCommand("epiclogs") != null) {
-            getCommand("epiclogs").setExecutor(epic);
-            getCommand("epiclogs").setTabCompleter(epic);
+        if (getCommand("elitelogs") != null) {
+            getCommand("elitelogs").setExecutor(elite);
+            getCommand("elitelogs").setTabCompleter(elite);
         }
     }
 

@@ -18,13 +18,13 @@ import java.util.Set;
 
 import static com.elitelogs.localization.Lang.colorize;
 
-public class EpicCommand implements CommandExecutor, TabCompleter {
+public class EliteLogsCommand implements CommandExecutor, TabCompleter {
     private final Map<String, Subcommand> registry = new HashMap<>();
     private final List<Subcommand> ordered = new ArrayList<>();
     private final Subcommand fallback;
     private final Lang lang;
 
-    public EpicCommand(Lang lang, Subcommand fallback, List<Subcommand> subcommands) {
+    public EliteLogsCommand(Lang lang, Subcommand fallback, List<Subcommand> subcommands) {
         this.lang = lang;
         this.fallback = fallback;
         register(fallback);

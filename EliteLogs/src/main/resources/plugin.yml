@@ -3,19 +3,19 @@ main: com.elitelogs.EliteLogsPlugin
 version: 1.1.0
 author: Elite
 commands:
-  epiclogs:
+  elitelogs:
     aliases: [elogs]
     description: EliteLogs administrative command
     usage: |
-      /epiclogs help
-      /epiclogs reload
-      /epiclogs version
-      /epiclogs export [today|full|last-crash]
-      /epiclogs inspector [all|plugins|mods|configs|garbage|server]
-      /epiclogs logs [toggle <type>]
-      /epiclogs metrics [now]
-      /epiclogs rotate
-      /epiclogs session [last]
+      /elitelogs help
+      /elitelogs reload
+      /elitelogs version
+      /elitelogs export [today|full|last-crash]
+      /elitelogs inspector [all|plugins|mods|configs|garbage|server]
+      /elitelogs logs [toggle <type>]
+      /elitelogs metrics [now]
+      /elitelogs rotate
+      /elitelogs session [last]
     permission: elogs.admin
 permissions:
   elogs.admin:
