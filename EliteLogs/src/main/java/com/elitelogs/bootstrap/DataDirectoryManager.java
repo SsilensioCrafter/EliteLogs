@@ -16,7 +16,7 @@ import java.util.logging.Logger;
 
 public class DataDirectoryManager {
     private static final List<String> FOLDERS = Arrays.asList(
-            "logs/info", "logs/warns", "logs/errors", "logs/chat", "logs/commands", "logs/players",
+            "logs/warns", "logs/errors", "logs/chat", "logs/commands", "logs/players",
             "logs/combat", "logs/inventory", "logs/economy", "logs/stats", "logs/console", "logs/rcon", "logs/suppressed",
             "reports/sessions", "reports/inspector",
             "archive", "exports", "lang"
@@ -41,6 +41,7 @@ public class DataDirectoryManager {
                 folder.mkdirs();
             }
         }
+        removeLegacyInfoFolder(data);
     }
 
     public void logLastSessionSummary() {
@@ -77,6 +78,30 @@ public class DataDirectoryManager {
                 rawLines.stream().limit(12).forEach(logger::info);
             }
         } catch (Exception ignored) {
+        }
+    }
+
+    private void removeLegacyInfoFolder(File dataFolder) {
+        File legacyInfo = new File(dataFolder, "logs/info");
+        if (!legacyInfo.exists() || !legacyInfo.isDirectory()) {
+            return;
+        }
+        File archiveRoot = new File(dataFolder, "archive");
+        if (!archiveRoot.exists() && !archiveRoot.mkdirs()) {
+            return;
+        }
+        File target = new File(archiveRoot, "legacy-info");
+        if (target.exists()) {
+            return;
+        }
+        if (legacyInfo.renameTo(target)) {
+            plugin.getLogger().info("[EliteLogs] Moved legacy logs/info into archive/legacy-info");
+            return;
+        }
+        File[] contents = legacyInfo.listFiles();
+        if (contents == null || contents.length == 0) {
+            //noinspection ResultOfMethodCallIgnored
+            legacyInfo.delete();
         }
     }
 

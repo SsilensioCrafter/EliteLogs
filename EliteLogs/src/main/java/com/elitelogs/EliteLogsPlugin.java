@@ -201,7 +201,6 @@ public class EliteLogsPlugin extends JavaPlugin {
             "  legacy:",
             "    flat-player-files: false",
             "  types:",
-            "    info: true",
             "    warns: true",
             "    errors: true",
             "    chat: true",

@@ -19,7 +19,7 @@
 ---
 
 ## ✨ Features
-- Comprehensive logging: chat, commands, economy, combat, inventory, info, stats, console, sessions, warnings, errors, and more.
+- Comprehensive logging: chat, commands, economy, combat, inventory, stats, console, sessions, warnings, errors, and more.
 - Per-player logs with dedicated folders (`logs/<module>/players/<uuid>`) and session histories (`logs/players/<playerName>/sessions`).
 - Global daily logs (`logs/<module>/global-YYYY-MM-DD.log`) for quick server-wide insights.
 - Configurable modules — enable or disable exactly what you need via `config.yml`.
@@ -132,12 +132,11 @@ logs:
   legacy:
     flat-player-files: false  # Old style: player-Name-YYYY-MM-DD.log (not recommended)
   types:
-    info: true
     warns: true
     errors: true
     chat: true
     commands: true
-    players: true             # Keep traditional logs/players/<name>/sessions
+    players: true             # Includes join/quit events and per-player folders
     combat: true
     inventory: true
     economy: true
