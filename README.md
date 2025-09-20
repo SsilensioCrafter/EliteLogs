@@ -94,7 +94,7 @@ enabled: true     # Enable/disable EliteLogs
 debug: false      # Debug mode (prints extra info, very spammy in console)
 
 # Plugin language
-language: en      # Options: ru | en
+language: en      # Options: en | ru | de | fr | es
 
 # ANSI color codes for messages
 ansi:
