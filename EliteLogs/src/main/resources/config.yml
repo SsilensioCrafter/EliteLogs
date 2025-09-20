@@ -11,6 +11,7 @@
 #          listeners without removing the jar.
 # debug:   Emits extra diagnostic output in console and YAML reports.
 # language:Locale of bundled messages (matches files in /lang/ folder).
+#          Available codes: en, ru, de, fr, es.
 
 enabled: true
 debug: false
