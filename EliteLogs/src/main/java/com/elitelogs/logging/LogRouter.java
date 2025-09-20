@@ -85,14 +85,6 @@ public class LogRouter {
         addListener(listener);
     }
 
-    public void info(String message) {
-        write("info", message);
-    }
-
-    public void info(UUID uuid, String playerName, String message) {
-        writeWithPlayer("info", uuid, playerName, message);
-    }
-
     public void warn(String message) {
         write("warns", message);
     }

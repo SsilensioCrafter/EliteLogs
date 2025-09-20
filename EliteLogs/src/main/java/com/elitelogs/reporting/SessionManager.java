@@ -98,7 +98,7 @@ public class SessionManager implements LogRouter.SinkListener {
         if ("errors".equals(category)) {
             errors.incrementAndGet();
         }
-        if (("players".equals(category) || "info".equals(category)) && line.contains("[join]")) {
+        if ("players".equals(category) && line.contains("[join]")) {
             joins.incrementAndGet();
         }
     }

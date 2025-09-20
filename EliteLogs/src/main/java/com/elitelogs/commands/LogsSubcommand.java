@@ -13,7 +13,7 @@ import static com.elitelogs.localization.Lang.colorize;
 
 public class LogsSubcommand extends AbstractSubcommand {
     private static final List<String> CATEGORIES = Arrays.asList(
-            "info", "warns", "errors", "chat", "commands", "players", "combat",
+            "warns", "errors", "chat", "commands", "players", "combat",
             "inventory", "economy", "stats", "console", "suppressed"
     );
 
