@@ -22,7 +22,7 @@ import java.util.logging.Level;
 public class SessionManager implements LogRouter.SinkListener {
     private final Plugin plugin;
     private final LogRouter router;
-    private long start;
+    private volatile long start;
     private AtomicInteger warns = new AtomicInteger();
     private AtomicInteger errors = new AtomicInteger();
     private AtomicInteger joins = new AtomicInteger();
@@ -146,6 +146,34 @@ public class SessionManager implements LogRouter.SinkListener {
 
     public void forceSnapshot() {
         save(false);
+    }
+
+    public long getSessionStartMillis() {
+        return start;
+    }
+
+    public long getUptimeSeconds() {
+        long startedAt = this.start;
+        if (startedAt == 0L) {
+            return 0L;
+        }
+        long now = System.currentTimeMillis();
+        if (now < startedAt) {
+            return 0L;
+        }
+        return (now - startedAt) / 1000L;
+    }
+
+    public int getWarnCount() {
+        return warns.get();
+    }
+
+    public int getErrorCount() {
+        return errors.get();
+    }
+
+    public int getJoinCount() {
+        return joins.get();
     }
 
     private static final class SessionSnapshot {
