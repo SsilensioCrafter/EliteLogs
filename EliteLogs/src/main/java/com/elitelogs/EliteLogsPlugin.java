@@ -99,7 +99,7 @@ public class EliteLogsPlugin extends JavaPlugin {
         this.inspectorBootstrap = new InspectorBootstrap(this, lang);
         this.inspector = inspectorBootstrap.start();
 
-        this.apiServer = new ApiServer(this, logRouter, metricsCollector, sessionManager);
+        this.apiServer = new ApiServer(this, logRouter, metricsCollector, sessionManager, watchdog);
         apiServer.start();
 
         registerCommands();
@@ -160,7 +160,13 @@ public class EliteLogsPlugin extends JavaPlugin {
         getLogger().info(Lang.colorize(lang.formatModule("PlayerTracker", playerTracker != null)));
     }
 
-    public Lang lang(){ return lang; }
+    public Lang lang() {
+        return lang;
+    }
+
+    public Inspector inspector() {
+        return inspector;
+    }
 
     public void reloadApi() {
         if (apiServer != null) {

@@ -39,6 +39,7 @@
 - Session reports for both server and players, stored separately for better tracking.
 - Discord integration: send errors, warnings, sessions, and watchdog alerts directly to your channel.
 - Inspector, metrics, suppressor, and watchdog subsystems included out of the box.
+- Watchdog can auto-run the inspector, prepare crash reports, and now exposes its full runtime state via the HTTP API.
 - Lightweight HTTP API exposes live metrics and recent logs for external dashboards.
 - Legacy mode available for flat player log files, if you miss the old days.
 - Built-in localization packs (EN, RU, DE, FR, ES) with graceful English fallback for missing keys.
@@ -74,6 +75,7 @@ EliteLogs ships with an optional HTTP server so your SsilensioWeb admin panel (o
 ### Endpoints
 - `GET /api/v1/status` — plugin version, enabled modules, and configuration flags.
 - `GET /api/v1/metrics` — live TPS/CPU/memory plus the active session counters and watchdog thresholds.
+- `GET /api/v1/watchdog` — watchdog thresholds, trigger timings, error counters, and the most recent trigger reason.
 - `GET /api/v1/logs` — list of log categories currently buffered in memory.
 - `GET /api/v1/logs/<category>?limit=100` — most recent lines for a category (limit defaults to the configured `log-history`).
 
