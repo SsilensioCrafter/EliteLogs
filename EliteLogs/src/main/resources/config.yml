@@ -65,6 +65,7 @@ logs:
     chat: true
     commands: true
     players: true       # Includes join/quit events and per-player folders
+    disconnects: true   # Tracks kicks, denials, and disconnect screens
     combat: true
     inventory: true
     economy: true
@@ -72,6 +73,8 @@ logs:
     console: true
     rcon: true
     suppressed: true  # catch-all bucket for anything muted elsewhere
+  disconnects:
+    capture-screen: true  # Requires ProtocolLib, records server disconnect screens
 
 # ── Session reports ────────────────────────────────────────────────────────────
 # Save interval defines how often session YAML is written. Disable players/global
@@ -103,7 +106,7 @@ api:
   enabled: false
   bind: "127.0.0.1"
   port: 9173
-  auth-token: ""
+  auth-token: ""       # Leave blank to auto-generate, manage via /elogs apikey
   log-history: 250
 
 # ── Chat suppressor ────────────────────────────────────────────────────────────

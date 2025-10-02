@@ -4,19 +4,19 @@ import com.elitelogs.EliteLogsPlugin;
 import com.elitelogs.localization.Lang;
 import org.bukkit.command.CommandSender;
 
-import java.util.Arrays;
+import org.bukkit.configuration.ConfigurationSection;
+
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import static com.elitelogs.localization.Lang.colorize;
 
 public class LogsSubcommand extends AbstractSubcommand {
-    private static final List<String> CATEGORIES = Arrays.asList(
-            "warns", "errors", "chat", "commands", "players", "combat",
-            "inventory", "economy", "stats", "console", "suppressed"
-    );
-
     public LogsSubcommand(EliteLogsPlugin plugin, Lang lang) {
         super(plugin, lang);
     }
@@ -40,6 +40,11 @@ public class LogsSubcommand extends AbstractSubcommand {
             return true;
         }
         sender.sendMessage(colorize(lang.get("command-logs-list")));
+        for (String category : resolveCategories()) {
+            boolean enabled = plugin.getConfig().getBoolean("logs.types." + category, true);
+            String state = enabled ? lang.get("command-logs-enabled") : lang.get("command-logs-disabled");
+            sender.sendMessage(colorize(" §7- §f" + category + " §8→ " + state));
+        }
         sender.sendMessage(colorize(lang.get("command-logs-toggle-hint")));
         return true;
     }
@@ -50,8 +55,19 @@ public class LogsSubcommand extends AbstractSubcommand {
             return Collections.singletonList("toggle");
         }
         if (args.length == 2 && "toggle".equalsIgnoreCase(args[0])) {
-            return CATEGORIES;
+            return new ArrayList<>(resolveCategories());
         }
         return Collections.emptyList();
+    }
+
+    private Set<String> resolveCategories() {
+        ConfigurationSection section = plugin.getConfig().getConfigurationSection("logs.types");
+        if (section == null) {
+            return Collections.emptySet();
+        }
+        Set<String> categories = new LinkedHashSet<>(section.getKeys(false));
+        List<String> sorted = new ArrayList<>(categories);
+        sorted.sort(Comparator.naturalOrder());
+        return new LinkedHashSet<>(sorted);
     }
 }

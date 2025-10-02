@@ -5,6 +5,7 @@ import com.elitelogs.listeners.ChatListener;
 import com.elitelogs.listeners.CommandListener;
 import com.elitelogs.listeners.CombatListener;
 import com.elitelogs.listeners.DeathListener;
+import com.elitelogs.listeners.DisconnectListener;
 import com.elitelogs.listeners.EconomyListener;
 import com.elitelogs.listeners.InventoryListener;
 import com.elitelogs.listeners.JoinQuitListener;
@@ -30,6 +31,7 @@ public class ListenerRegistrar {
         registerIfEnabled("logs.types.commands", new CommandListener(plugin, router, tracker));
         registerIfEnabled("logs.types.combat", new DeathListener(router));
         registerIfEnabled("logs.types.players", new JoinQuitListener(router, tracker));
+        registerIfEnabled("logs.types.disconnects", new DisconnectListener(plugin, router));
         registerIfEnabled("logs.types.combat", new CombatListener(router));
         if (plugin.getConfig().getBoolean("logs.types.inventory", true)) {
             InventoryListener inventoryListener = new InventoryListener(router, tracker);

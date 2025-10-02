@@ -1,6 +1,6 @@
 name: EliteLogs
 main: com.elitelogs.EliteLogsPlugin
-version: 1.2
+version: 1.2.1
 author: Elite
 commands:
   elitelogs:

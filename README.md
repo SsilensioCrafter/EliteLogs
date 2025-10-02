@@ -23,16 +23,19 @@
 - `/elogs help` → show this help message  
 - `/elogs reload` → reload the plugin configuration  
 - `/elogs inspector` → run the Inspector for quick analysis of sessions, chat, commands, and errors  
-- `/elogs metrics` → display logging metrics and statistics  
-- `/elogs export` → export logs into external-friendly formats  
-- `/elogs rotate [force]` → archive old logs (add `force` to rotate immediately)  
-- `/elogs logs` → list available log categories (chat, commands, sessions, etc.)  
-- `/elogs version` → show the current plugin version  
+- `/elogs metrics` → display logging metrics and statistics
+- `/elogs export` → export logs into external-friendly formats
+- `/elogs rotate [force]` → archive old logs (add `force` to rotate immediately)
+- `/elogs apikey [show|status|regenerate]` → inspect or rotate the HTTP API key
+- `/elogs logs` → list all log categories with their enabled/disabled state and toggle them live
+- `/elogs version` → show the current plugin version
 
 ---
 
 ## ✨ Features
-- Comprehensive logging: chat, commands, economy, combat, inventory, stats, console, sessions, warnings, errors, and more.
+- Comprehensive logging: chat, commands, economy, combat, inventory, stats, console, sessions, warnings, errors, disconnects, and more.
+- Dedicated `/logs/disconnects` folder captures login denials, kicks, resource-pack responses, and even server disconnect screens (via ProtocolLib when available) with normalized key/value fields (`result`, `ip`, `reason`, `source`, etc.).
+- Optional ProtocolLib capture can now be toggled through `logs.disconnects.capture-screen` for hosts that prefer to disable JSON snooping.
 - Per-player logs with dedicated folders (`logs/<module>/players/<uuid>`) and session histories (`logs/players/<playerName>/sessions`).
 - Global daily logs (`logs/<module>/global-YYYY-MM-DD.log`) for quick server-wide insights.
 - Configurable modules — enable or disable exactly what you need via `config.yml`.
@@ -44,6 +47,13 @@
 - Legacy mode available for flat player log files, if you miss the old days.
 - Built-in localization packs (EN, RU, DE, FR, ES) with graceful English fallback for missing keys.
 - Written with more caffeine than code — but stable enough to trust your server with.
+
+### 🔌 Disconnect log format
+
+- Every entry is emitted as `[phase] key=value …` so scripts and SIEM pipelines can parse them easily.
+- Phases: `prelogin-deny`, `login-deny`, `kick`, `quit`, `resource-pack`, and `disconnect-screen` (ProtocolLib).
+- Common keys include `result`, `ip`, `source`, `cause`, `status`, `reason`, and `raw-json` (disconnect screen payloads).
+- Per-player mirrors are written to `logs/disconnects/players/<uuid>/global-YYYY-MM-DD.log` when `split-by-player` is enabled.
 
 ## 🧩 Version compatibility
 | Range | What works |
@@ -80,7 +90,8 @@ EliteLogs ships with an optional HTTP server so your SsilensioWeb admin panel (o
 - `GET /api/v1/logs/<category>?limit=100` — most recent lines for a category (limit defaults to the configured `log-history`).
 
 ### Authentication
-- Leave `auth-token` empty for open access, or set a string and pass it as the `X-API-Key` header (or `token` query parameter).
+- Leave `auth-token` empty and EliteLogs will auto-generate a strong token on startup; use `/elogs apikey show` (or `regenerate`) to reveal or rotate it safely.
+- Provide the token via the `X-API-Key` header (preferred) or the `token` query parameter.
 - `log-history` controls how many lines are cached per category for instant API responses.
 - Bind the server to `127.0.0.1` when using a reverse proxy; use `0.0.0.0` only if you really want to expose it publicly.
 
@@ -169,12 +180,15 @@ logs:
     chat: true
     commands: true
     players: true             # Includes join/quit events and per-player folders
+    disconnects: true         # Tracks login denials, kicks, resource pack status, disconnect screens
     combat: true
     inventory: true
     economy: true
     stats: true
     console: true
     suppressed: true
+  disconnects:
+    capture-screen: true      # Requires ProtocolLib to read the disconnect screen text
 
 # Player sessions summary
 sessions:
@@ -201,7 +215,7 @@ api:
   enabled: false
   bind: "127.0.0.1"
   port: 9173
-  auth-token: ""
+  auth-token: ""             # Leave blank to auto-generate, manage via /elogs apikey
   log-history: 250
 
 # Message suppressor / spam filter
