@@ -55,7 +55,7 @@ public class DisconnectListener implements Listener {
         router.disconnect(entry);
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onKick(PlayerKickEvent event) {
         if (event == null) {
             return;

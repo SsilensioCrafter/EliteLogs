@@ -144,7 +144,7 @@ public class EliteLogsPlugin extends JavaPlugin {
                         new ExportSubcommand(this, lang),
                         new InspectorSubcommand(this, lang, inspector),
                         new ApiKeySubcommand(this, lang),
-                        new LogsSubcommand(this, lang),
+                        new LogsSubcommand(this, lang, logRouter),
                         new SessionSubcommand(this, lang, sessionManager)
                 )
         );

@@ -2,6 +2,7 @@ package com.elitelogs.commands;
 
 import com.elitelogs.EliteLogsPlugin;
 import com.elitelogs.localization.Lang;
+import com.elitelogs.logging.LogRouter;
 import org.bukkit.command.CommandSender;
 
 import org.bukkit.configuration.ConfigurationSection;
@@ -17,8 +18,11 @@ import java.util.Set;
 import static com.elitelogs.localization.Lang.colorize;
 
 public class LogsSubcommand extends AbstractSubcommand {
-    public LogsSubcommand(EliteLogsPlugin plugin, Lang lang) {
+    private final LogRouter router;
+
+    public LogsSubcommand(EliteLogsPlugin plugin, Lang lang, LogRouter router) {
         super(plugin, lang);
+        this.router = router;
     }
 
     @Override
@@ -34,6 +38,9 @@ public class LogsSubcommand extends AbstractSubcommand {
             boolean value = plugin.getConfig().getBoolean(path, true);
             plugin.getConfig().set(path, !value);
             plugin.saveConfig();
+            if (router != null) {
+                router.reloadConfig();
+            }
             sender.sendMessage(colorize(lang.get("command-logs-toggled")
                     .replace("{type}", type)
                     .replace("{value}", String.valueOf(!value))));
