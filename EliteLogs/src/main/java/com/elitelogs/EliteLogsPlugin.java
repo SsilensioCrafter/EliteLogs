@@ -1,5 +1,6 @@
 package com.elitelogs;
 
+import com.elitelogs.api.ApiServer;
 import com.elitelogs.bootstrap.DataDirectoryManager;
 import com.elitelogs.bootstrap.InspectorBootstrap;
 import com.elitelogs.bootstrap.ListenerRegistrar;
@@ -58,6 +59,7 @@ public class EliteLogsPlugin extends JavaPlugin {
     private InspectorBootstrap inspectorBootstrap;
     private Inspector inspector;
     private ListenerRegistrar listenerRegistrar;
+    private ApiServer apiServer;
 
     @Override
     public void onEnable() {
@@ -97,6 +99,9 @@ public class EliteLogsPlugin extends JavaPlugin {
         this.inspectorBootstrap = new InspectorBootstrap(this, lang);
         this.inspector = inspectorBootstrap.start();
 
+        this.apiServer = new ApiServer(this, logRouter, metricsCollector, sessionManager, watchdog);
+        apiServer.start();
+
         registerCommands();
 
         dataDirectories.logLastSessionSummary();
@@ -115,6 +120,9 @@ public class EliteLogsPlugin extends JavaPlugin {
         }
         if (loggingBootstrap != null) {
             loggingBootstrap.shutdown();
+        }
+        if (apiServer != null) {
+            apiServer.stop();
         }
         getLogger().info(Lang.colorize(lang.get("plugin-disabled")));
     }
@@ -152,7 +160,19 @@ public class EliteLogsPlugin extends JavaPlugin {
         getLogger().info(Lang.colorize(lang.formatModule("PlayerTracker", playerTracker != null)));
     }
 
-    public Lang lang(){ return lang; }
+    public Lang lang() {
+        return lang;
+    }
+
+    public Inspector inspector() {
+        return inspector;
+    }
+
+    public void reloadApi() {
+        if (apiServer != null) {
+            apiServer.reload();
+        }
+    }
 
     // === Config auto-generate & self-heal ===
     private void writeDefaultConfigFile(File cfg) {
@@ -229,6 +249,13 @@ public class EliteLogsPlugin extends JavaPlugin {
             "metrics:",
             "  enabled: true",
             "  interval-seconds: 60",
+            "",
+            "api:",
+            "  enabled: false",
+            "  bind: \"127.0.0.1\"",
+            "  port: 9173",
+            "  auth-token: \"\"",
+            "  log-history: 250",
             "",
             "suppressor:",
             "  enabled: true",

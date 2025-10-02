@@ -39,6 +39,8 @@
 - Session reports for both server and players, stored separately for better tracking.
 - Discord integration: send errors, warnings, sessions, and watchdog alerts directly to your channel.
 - Inspector, metrics, suppressor, and watchdog subsystems included out of the box.
+- Watchdog can auto-run the inspector, prepare crash reports, and now exposes its full runtime state via the HTTP API.
+- Lightweight HTTP API exposes live metrics and recent logs for external dashboards.
 - Legacy mode available for flat player log files, if you miss the old days.
 - Built-in localization packs (EN, RU, DE, FR, ES) with graceful English fallback for missing keys.
 - Written with more caffeine than code — but stable enough to trust your server with.
@@ -62,13 +64,30 @@
 ## 🗺️ Roadmap
 - [x] Add Warn & Reports logging  
 - [ ] Database support  
-- [ ] Fancy web panel (because who doesn’t love dashboards)  
-- [ ] Maybe AI log summarizer (so ChatGPT can tell you who’s sus)  
+- [ ] Fancy web panel (because who doesn’t love dashboards)
+- [ ] Maybe AI log summarizer (so ChatGPT can tell you who’s sus)
+
+---
+
+## 🔌 HTTP API
+EliteLogs ships with an optional HTTP server so your SsilensioWeb admin panel (or any other dashboard) can pull data straight from the plugin. Enable it by flipping the `api.enabled` flag in `config.yml` and adjusting the bind address/port if needed.
+
+### Endpoints
+- `GET /api/v1/status` — plugin version, enabled modules, and configuration flags.
+- `GET /api/v1/metrics` — live TPS/CPU/memory plus the active session counters and watchdog thresholds.
+- `GET /api/v1/watchdog` — watchdog thresholds, trigger timings, error counters, and the most recent trigger reason.
+- `GET /api/v1/logs` — list of log categories currently buffered in memory.
+- `GET /api/v1/logs/<category>?limit=100` — most recent lines for a category (limit defaults to the configured `log-history`).
+
+### Authentication
+- Leave `auth-token` empty for open access, or set a string and pass it as the `X-API-Key` header (or `token` query parameter).
+- `log-history` controls how many lines are cached per category for instant API responses.
+- Bind the server to `127.0.0.1` when using a reverse proxy; use `0.0.0.0` only if you really want to expose it publicly.
 
 ---
 
 ## 🤝 Contributing
-Wanna vibe-code with me?  
+Wanna vibe-code with me?
 
 1. Fork this repo  
 2. Create a new branch (`git checkout -b feature/your-idea`)  
@@ -176,6 +195,14 @@ inspector:
 metrics:
   enabled: true
   interval-seconds: 60
+
+# HTTP API (for dashboards)
+api:
+  enabled: false
+  bind: "127.0.0.1"
+  port: 9173
+  auth-token: ""
+  log-history: 250
 
 # Message suppressor / spam filter
 suppressor:

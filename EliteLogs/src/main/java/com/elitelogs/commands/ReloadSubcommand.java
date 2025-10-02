@@ -27,6 +27,7 @@ public class ReloadSubcommand extends AbstractSubcommand {
         lang.load();
         DiscordAlerter.init(plugin);
         router.reloadConfig();
+        plugin.reloadApi();
         sender.sendMessage(colorize(lang.get("command-reload")));
         return true;
     }

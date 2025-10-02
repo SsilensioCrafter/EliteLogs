@@ -97,6 +97,15 @@ metrics:
   enabled: true
   interval-seconds: 60
 
+# ── HTTP API ───────────────────────────────────────────────────────────────────
+# Expose recent logs, metrics, and session data for the web dashboard.
+api:
+  enabled: false
+  bind: "127.0.0.1"
+  port: 9173
+  auth-token: ""
+  log-history: 250
+
 # ── Chat suppressor ────────────────────────────────────────────────────────────
 # Filters spam by caching recent messages. mode can be "blacklist" or
 # "whitelist"; filters accepts regex entries.

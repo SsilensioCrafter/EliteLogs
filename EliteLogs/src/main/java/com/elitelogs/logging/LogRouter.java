@@ -80,6 +80,10 @@ public class LogRouter {
         if (listener != null) listeners.add(listener);
     }
 
+    public void removeListener(SinkListener listener) {
+        if (listener != null) listeners.remove(listener);
+    }
+
     public void setListener(SinkListener listener) {
         listeners.clear();
         addListener(listener);
