@@ -6,6 +6,10 @@
 # Indentation: 2 spaces (tabs are NOT allowed)
 # Tip: values prefixed with "§" use Minecraft color codes.
 
+# ── Version metadata ─────────────────────────────────────────────────────────
+# Automatically updated during builds; keep it untouched for support diagnostics.
+version: "${project.version}"
+
 # ── Core behaviour ──────────────────────────────────────────────────────────────
 # enabled: Master toggle for the entire plugin. Set to false to disable all
 #          listeners without removing the jar.

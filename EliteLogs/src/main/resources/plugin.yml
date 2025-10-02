@@ -1,6 +1,6 @@
-name: EliteLogs
+name: ${project.name}
 main: com.elitelogs.EliteLogsPlugin
-version: 1.2.1
+version: ${project.version}
 author: Elite
 commands:
   elitelogs:

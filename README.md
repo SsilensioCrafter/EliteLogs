@@ -202,11 +202,17 @@ If you want to treat it like a **"Do What The Heck You Want License"**, go for i
 ## ⚙️ Config
 Yes, it has a config. Even your laziest admin can use it:
 
+### Version metadata
+- `version` is stamped during the build so the YAML always matches the jar you are running. Leave it untouched; `/elogs reload` will rewrite the value after you deploy an update.
+
 ```yaml
 # ============================
 #  EliteLogs Configuration
 #  vibe-coded © 2025
 # ============================
+
+# Version metadata (auto-managed during builds)
+version: "1.2.1"        # Overwritten on reload/update
 
 # Main switches
 enabled: true     # Enable/disable EliteLogs
@@ -484,11 +490,17 @@ EliteLogs может запускать опциональный HTTP-серве
 ### ⚙️ Конфигурация
 Да, здесь тоже есть пример конфигурации (комментарии остаются на английском, чтобы не расходиться с файлом `config.yml`):
 
+### Метаданные версии
+- Поле `version` автоматически проставляется при сборке, чтобы YAML совпадал с установленным jar. Не трогайте его вручную — после обновления достаточно выполнить `/elogs reload`, и значение перепишется само.
+
 ```yaml
 # ============================
 #  EliteLogs Configuration
 #  vibe-coded © 2025
 # ============================
+
+# Version metadata (auto-managed during builds)
+version: "1.2.1"        # Overwritten on reload/update
 
 # Main switches
 enabled: true     # Enable/disable EliteLogs
