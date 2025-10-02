@@ -1,6 +1,6 @@
 # EliteLogs - for admins, by admin.
 
-<img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/0533417a-3d93-4737-a78c-8cb6886b173d" />
+<img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/4e99e7ca-c281-4ad8-a2bc-80145ab9deb2" />
 
 
 > ✨ **EliteLogs** — a Minecraft plugin built for server admins who are done with messy, unreadable logs.  
@@ -220,4 +220,5 @@ watchdog:
     run-inspector: true       # Run inspector on trigger
     create-crash-report: true # Generate crash report
     discord-alert: true       # Send alert to Discord
+
 
