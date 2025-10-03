@@ -12,13 +12,17 @@ import com.elitelogs.logging.LogRouter;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.LinkedHashSet;
+import java.util.Locale;
+import java.util.Set;
 
 class ProtocolLibDisconnectInterceptor extends PacketAdapter implements DisconnectPacketInterceptor {
     private final LogRouter router;
 
     ProtocolLibDisconnectInterceptor(Plugin plugin, LogRouter router) {
-        super(plugin, ListenerPriority.NORMAL, PacketType.Play.Server.DISCONNECT);
+        super(plugin, ListenerPriority.NORMAL, resolveDisconnectPackets());
         this.router = router;
         ProtocolLibrary.getProtocolManager().addPacketListener(this);
     }
@@ -68,6 +72,40 @@ class ProtocolLibDisconnectInterceptor extends PacketAdapter implements Disconne
         } catch (Throwable ignored) {
         }
         return json;
+    }
+
+    private static PacketType[] resolveDisconnectPackets() {
+        Set<PacketType> packetTypes = new LinkedHashSet<>();
+        for (String className : new String[]{
+                "com.comphenix.protocol.PacketType$Play$Server",
+                "com.comphenix.protocol.PacketType$Login$Server",
+                "com.comphenix.protocol.PacketType$Configuration$Server"
+        }) {
+            try {
+                Class<?> holder = Class.forName(className);
+                for (Field field : holder.getFields()) {
+                    if (!PacketType.class.isAssignableFrom(field.getType())) {
+                        continue;
+                    }
+                    String name = field.getName();
+                    if (name == null || !name.toUpperCase(Locale.ROOT).contains("DISCONNECT")) {
+                        continue;
+                    }
+                    PacketType type = (PacketType) field.get(null);
+                    if (type != null) {
+                        packetTypes.add(type);
+                    }
+                }
+            } catch (ClassNotFoundException ignored) {
+                // The ProtocolLib build in use doesn't expose this packet group.
+            } catch (Throwable ignored) {
+                // Any failure to discover a packet type should not prevent fallback behaviour.
+            }
+        }
+        if (packetTypes.isEmpty()) {
+            throw new IllegalStateException("No disconnect packets detected in ProtocolLib.");
+        }
+        return packetTypes.toArray(new PacketType[0]);
     }
 
 }
