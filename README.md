@@ -65,6 +65,7 @@ Displays the current tracked session summaries, including duration and active pl
 
 ## ✨ Features at a Glance
 - Comprehensive logging: chat, commands, economy, combat, inventory, stats, console, sessions, warnings, errors, disconnects, and more.
+- Optional MySQL mirroring writes each log type into its own table (for example `elitelogs_chat` or `elitelogs_errors`) with JSON tag arrays, structured context objects, configurable prefixes, and automatic schema/index upgrades for ultra-fast dashboards and API calls.
 - Dedicated `/logs/disconnects` folder captures login denials, kicks, resource-pack responses, and even server disconnect screens (via ProtocolLib when available) with normalized key/value fields (`result`, `ip`, `reason`, `source`, etc.).
 - Optional ProtocolLib capture can now be toggled through `logs.disconnects.capture-screen` for hosts that prefer to disable JSON snooping.
 - Per-player logs with dedicated folders (`logs/<module>/players/<uuid>`) and session histories (`logs/players/<playerName>/sessions`).
@@ -97,6 +98,14 @@ Displays the current tracked session summaries, including duration and active pl
 - **console** — a rotating copy of the live console for forensics.
 - **rcon** — everything executed through remote console connections.
 - **suppressed** — overflow bucket that stores messages muted elsewhere (handy for auditing filters).
+
+### MySQL storage (`storage.database`)
+- `enabled` + credentials: once enabled, every active log type is mirrored without touching the filesystem pipeline.
+- `table-prefix`: change the namespace that precedes each per-log table (`elitelogs_chat`, `elitelogs_errors`, ...).
+- `flush-interval-ticks`: controls how frequently the async worker flushes queued rows (1 tick = 50 ms).
+- `auto-upgrade`: when true, tables, indexes, and the registry are created/updated automatically on connect so dashboards always have the right shape.
+- Schema per table: `occurred_at`, `event_type`, `message`, `player_uuid`, `player_name`, `tags` (JSON array), and `context` (JSON object with category/player/tag keys).
+- Registry tables (`<prefix>schema_info`, `<prefix>registry`) are maintained automatically to track schema version and the mapping between categories and tables.
 
 ### Disconnect pipeline
 - Phases recorded: `prelogin-deny`, `login-deny`, `kick`, `quit`, `resource-pack`, `disconnect-screen`.
