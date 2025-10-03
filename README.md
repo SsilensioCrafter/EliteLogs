@@ -362,7 +362,7 @@ watchdog:
 
 ## 🛠️ Building
 
-1. Make sure JDK 8+ and Maven are installed.
+1. Make sure JDK 17+ and Maven are installed (Spigot 1.20 requires Java 17).
 2. Run `mvn -f EliteLogs/pom.xml -DskipTests package` from the repository root (or `cd EliteLogs` first and then execute `mvn -DskipTests package`).
    - Minimal ProtocolLib 5.1.0 APIs live in `EliteLogs/src/stubs/java`; the build helper adds them during compilation and the jar plugin excludes them from the final artifact. Production servers still need the real ProtocolLib plugin to capture DISCONNECT packets.
 
