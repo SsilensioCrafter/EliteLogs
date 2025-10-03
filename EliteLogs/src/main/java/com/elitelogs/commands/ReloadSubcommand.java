@@ -24,6 +24,7 @@ public class ReloadSubcommand extends AbstractSubcommand {
     @Override
     public boolean execute(CommandSender sender, String[] args) {
         plugin.reloadConfig();
+        plugin.ensureApiToken(false);
         lang.load();
         DiscordAlerter.init(plugin);
         router.reloadConfig();

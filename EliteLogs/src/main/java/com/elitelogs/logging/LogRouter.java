@@ -125,6 +125,35 @@ public class LogRouter {
         write("console", message);
     }
 
+    public void disconnect(UUID uuid, String playerName, String message) {
+        disconnect(DisconnectLogEntry.phase("legacy")
+                .player(uuid, playerName)
+                .rawMessage(message)
+                .build());
+    }
+
+    public void disconnect(String message) {
+        disconnect(DisconnectLogEntry.phase("legacy")
+                .rawMessage(message)
+                .build());
+    }
+
+    public void disconnect(DisconnectLogEntry entry) {
+        if (entry == null) {
+            return;
+        }
+        String message = entry.formatMessage();
+        if (message == null || message.isEmpty()) {
+            return;
+        }
+        UUID uuid = entry.getUuid();
+        if (uuid != null) {
+            writeWithPlayer("disconnects", uuid, entry.resolvePlayerName(), message);
+        } else {
+            write("disconnects", message);
+        }
+    }
+
     public void player(UUID uuid, String playerName, String message) {
         writeWithPlayer("players", uuid, playerName, message);
     }
