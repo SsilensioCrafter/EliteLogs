@@ -15,6 +15,8 @@ import org.bukkit.event.player.PlayerResourcePackStatusEvent;
 import org.bukkit.event.server.PluginDisableEvent;
 import org.bukkit.plugin.Plugin;
 
+import java.util.logging.Level;
+
 public class DisconnectListener implements Listener {
     private final Plugin plugin;
     private final LogRouter router;
@@ -23,7 +25,9 @@ public class DisconnectListener implements Listener {
     public DisconnectListener(Plugin plugin, LogRouter router) {
         this.plugin = plugin;
         this.router = router;
-        this.packetInterceptor = createPacketInterceptor(plugin, router);
+        HookAttempt attempt = attemptProtocolLibHook(plugin, router);
+        this.packetInterceptor = attempt.interceptor();
+        attempt.log(plugin);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -104,26 +108,60 @@ public class DisconnectListener implements Listener {
         }
     }
 
-    private DisconnectPacketInterceptor createPacketInterceptor(Plugin plugin, LogRouter router) {
+    private HookAttempt attemptProtocolLibHook(Plugin plugin, LogRouter router) {
         if (plugin == null || router == null) {
-            return DisconnectPacketInterceptor.NOOP;
+            return HookAttempt.silent();
         }
         if (!plugin.getConfig().getBoolean("logs.disconnects.capture-screen", true)) {
-            return DisconnectPacketInterceptor.NOOP;
+            return HookAttempt.info(DisconnectPacketInterceptor.NOOP,
+                    "[EliteLogs] Disconnect screen capture disabled via config (logs.disconnects.capture-screen = false).");
         }
         if (Bukkit.getPluginManager().getPlugin("ProtocolLib") == null) {
-            return DisconnectPacketInterceptor.NOOP;
+            return HookAttempt.info(DisconnectPacketInterceptor.NOOP,
+                    "[EliteLogs] ProtocolLib plugin not detected; disconnect screen capture limited to Bukkit events.");
         }
         try {
             Class.forName("com.comphenix.protocol.ProtocolLibrary");
             Class<?> hookClass = Class.forName("com.elitelogs.listeners.ProtocolLibDisconnectInterceptor");
             Object instance = hookClass.getConstructor(Plugin.class, LogRouter.class).newInstance(plugin, router);
-            if (instance instanceof DisconnectPacketInterceptor) {
-                return (DisconnectPacketInterceptor) instance;
+            if (instance instanceof DisconnectPacketInterceptor interceptor) {
+                return HookAttempt.info(interceptor,
+                        "[EliteLogs] ProtocolLib detected; disconnect screen capture enabled.");
             }
-        } catch (Throwable ignored) {
+            return HookAttempt.warn("ProtocolLib detected but disconnect interceptor could not be initialised; disconnect screen capture disabled.");
+        } catch (Throwable ex) {
+            return HookAttempt.failure(ex);
         }
-        return DisconnectPacketInterceptor.NOOP;
+    }
+
+    private record HookAttempt(DisconnectPacketInterceptor interceptor, Level level, String message, Throwable error) {
+        private static HookAttempt silent() {
+            return new HookAttempt(DisconnectPacketInterceptor.NOOP, Level.FINE, null, null);
+        }
+
+        private static HookAttempt info(DisconnectPacketInterceptor interceptor, String message) {
+            return new HookAttempt(interceptor, Level.INFO, message, null);
+        }
+
+        private static HookAttempt warn(String message) {
+            return new HookAttempt(DisconnectPacketInterceptor.NOOP, Level.WARNING, message, null);
+        }
+
+        private static HookAttempt failure(Throwable error) {
+            return new HookAttempt(DisconnectPacketInterceptor.NOOP, Level.WARNING,
+                    "[EliteLogs] Failed to enable ProtocolLib disconnect screen capture; falling back to vanilla events.", error);
+        }
+
+        private void log(Plugin plugin) {
+            if (plugin == null || message == null) {
+                return;
+            }
+            if (error != null) {
+                plugin.getLogger().log(level, message, error);
+            } else {
+                plugin.getLogger().log(level, message);
+            }
+        }
     }
 
 }

@@ -68,6 +68,7 @@ Displays the current tracked session summaries, including duration and active pl
 - Optional MySQL mirroring writes each log type into its own table (for example `elitelogs_chat` or `elitelogs_errors`) with JSON tag arrays, structured context objects, configurable prefixes, and automatic schema/index upgrades for ultra-fast dashboards and API calls.
 - Dedicated `/logs/disconnects` folder captures login denials, kicks, resource-pack responses, and even server disconnect screens (via ProtocolLib when available) with normalized key/value fields (`result`, `ip`, `reason`, `source`, etc.).
 - Optional ProtocolLib capture can now be toggled through `logs.disconnects.capture-screen` for hosts that prefer to disable JSON snooping.
+- Auto-detects ProtocolLib on startup (declared as a soft dependency) and logs whether disconnect screen capture is active, so you immediately know if packet hooks are in effect.
 - Per-player logs with dedicated folders (`logs/<module>/players/<uuid>`) and session histories (`logs/players/<playerName>/sessions`).
 - Global daily logs (`logs/<module>/global-YYYY-MM-DD.log`) for quick server-wide insights.
 - Configurable modules — enable or disable exactly what you need via `config.yml`.
