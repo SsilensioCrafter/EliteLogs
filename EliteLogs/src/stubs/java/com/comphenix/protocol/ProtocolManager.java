@@ -1,13 +1,9 @@
 package com.comphenix.protocol;
 
-import com.comphenix.protocol.events.PacketAdapter;
+import com.comphenix.protocol.events.PacketListener;
 
-public class ProtocolManager {
-    public void addPacketListener(PacketAdapter adapter) {
-        // no-op stub
-    }
+public interface ProtocolManager {
+    void addPacketListener(PacketListener listener);
 
-    public void removePacketListener(PacketAdapter adapter) {
-        // no-op stub
-    }
+    void removePacketListener(PacketListener listener);
 }

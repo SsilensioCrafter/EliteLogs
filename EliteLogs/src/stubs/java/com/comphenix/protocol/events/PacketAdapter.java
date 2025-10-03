@@ -3,7 +3,7 @@ package com.comphenix.protocol.events;
 import com.comphenix.protocol.PacketType;
 import org.bukkit.plugin.Plugin;
 
-public class PacketAdapter {
+public class PacketAdapter implements PacketListener {
     public PacketAdapter(Plugin plugin, ListenerPriority priority, PacketType... types) {
         // no-op stub
     }
