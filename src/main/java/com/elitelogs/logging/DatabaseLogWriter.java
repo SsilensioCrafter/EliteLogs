@@ -587,12 +587,12 @@ public final class DatabaseLogWriter implements AutoCloseable {
         }
         StringBuilder builder = new StringBuilder("{");
         boolean first = true;
-        for (Map.Entry<String, String> entry : context.entrySet()) {
+        for (Map.Entry<String, String> contextEntry : context.entrySet()) {
             if (!first) {
                 builder.append(',');
             }
-            builder.append('"').append(escapeJson(entry.getKey())).append('"').append(':');
-            builder.append('"').append(escapeJson(entry.getValue())).append('"');
+            builder.append('"').append(escapeJson(contextEntry.getKey())).append('"').append(':');
+            builder.append('"').append(escapeJson(contextEntry.getValue())).append('"');
             first = false;
         }
         builder.append('}');

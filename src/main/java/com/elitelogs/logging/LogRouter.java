@@ -94,7 +94,7 @@ public class LogRouter {
             try {
                 DatabaseLogWriter writer = new DatabaseLogWriter(plugin, newSettings, categoriesForSchema);
                 this.databaseWriter = writer;
-                plugin.getLogger().info("[EliteLogs] MySQL storage ready (" + newSettings.getTablePrefix() + "*").");
+                plugin.getLogger().info("[EliteLogs] MySQL storage ready (" + newSettings.getTablePrefix() + "*)");
             } catch (SQLException ex) {
                 this.databaseWriter = null;
                 plugin.getLogger().log(Level.SEVERE, "[EliteLogs] Failed to initialise MySQL storage: " + ex.getMessage(), ex);
