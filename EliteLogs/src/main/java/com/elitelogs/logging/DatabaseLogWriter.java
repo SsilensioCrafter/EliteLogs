@@ -38,7 +38,7 @@ import java.util.logging.Logger;
  */
 public final class DatabaseLogWriter implements AutoCloseable {
 
-    private static final int SCHEMA_VERSION = 1;
+    private static final int SCHEMA_VERSION = 2;
     private static final int MAX_EVENT_TYPE_LENGTH = 64;
 
     private final Plugin plugin;
@@ -51,6 +51,7 @@ public final class DatabaseLogWriter implements AutoCloseable {
     private final Map<String, String> tableNames = new ConcurrentHashMap<>();
     private final Set<String> ensuredTables = ConcurrentHashMap.newKeySet();
     private final Map<String, String> insertStatements = new ConcurrentHashMap<>();
+    private final Map<String, PlayerUuidColumnType> playerUuidColumnTypes = new ConcurrentHashMap<>();
     private final String tablePrefix;
     private final long flushIntervalMillis;
     private final boolean autoUpgrade;
@@ -132,7 +133,7 @@ public final class DatabaseLogWriter implements AutoCloseable {
                             "FROM `" + table + "` ORDER BY occurred_at DESC LIMIT ?")) {
                 ps.setInt(1, normalizedLimit);
                 try (ResultSet rs = ps.executeQuery()) {
-                    return extractRecords(category, rs);
+                    return extractRecords(category, table, rs);
                 }
             }
         } catch (SQLException ex) {
@@ -163,7 +164,7 @@ public final class DatabaseLogWriter implements AutoCloseable {
                 ps.setString(3, pattern);
                 ps.setInt(4, normalizedLimit);
                 try (ResultSet rs = ps.executeQuery()) {
-                    return extractRecords(category, rs);
+                    return extractRecords(category, table, rs);
                 }
             }
         } catch (SQLException ex) {
@@ -264,14 +265,15 @@ public final class DatabaseLogWriter implements AutoCloseable {
             try {
                 Map<String, List<DbEntry>> grouped = groupByTable(connection, buffer);
                 for (Map.Entry<String, List<DbEntry>> entry : grouped.entrySet()) {
+                    String table = entry.getKey();
                     List<DbEntry> entries = entry.getValue();
                     if (entries.isEmpty()) {
                         continue;
                     }
-                    String sql = insertStatements.computeIfAbsent(entry.getKey(), this::buildInsertSql);
+                    String sql = insertStatements.computeIfAbsent(table, this::buildInsertSql);
                     try (PreparedStatement ps = connection.prepareStatement(sql)) {
                         for (DbEntry dbEntry : entries) {
-                            bindEntry(ps, dbEntry);
+                            bindEntry(table, ps, dbEntry);
                             ps.addBatch();
                         }
                         ps.executeBatch();
@@ -375,7 +377,7 @@ public final class DatabaseLogWriter implements AutoCloseable {
                         "occurred_at TIMESTAMP(6) NOT NULL," +
                         "event_type VARCHAR(64) NOT NULL," +
                         "message TEXT NOT NULL," +
-                        "player_uuid BINARY(16) NULL," +
+                        "player_uuid CHAR(36) NULL," +
                         "player_name VARCHAR(64) NULL," +
                         "tags JSON NOT NULL," +
                         "context JSON NOT NULL," +
@@ -387,6 +389,7 @@ public final class DatabaseLogWriter implements AutoCloseable {
             if (autoUpgrade) {
                 upgradeTable(connection, table);
             }
+            recordPlayerUuidColumnType(connection, table);
             registerCategory(connection, category, table);
             ensuredTables.add(table);
         }
@@ -416,6 +419,12 @@ public final class DatabaseLogWriter implements AutoCloseable {
                 }
             }
         }
+
+        ColumnMeta playerUuidMeta = getColumnMeta(connection, table, "player_uuid");
+        if (playerUuidMeta != null && playerUuidMeta.isBinary16()) {
+            migratePlayerUuidColumn(connection, table);
+        }
+
         ensureIndexes(connection, table);
     }
 
@@ -465,20 +474,88 @@ public final class DatabaseLogWriter implements AutoCloseable {
         return indexes;
     }
 
+    private void recordPlayerUuidColumnType(Connection connection, String table) throws SQLException {
+        ColumnMeta meta = getColumnMeta(connection, table, "player_uuid");
+        PlayerUuidColumnType type = (meta != null && meta.isBinary16())
+                ? PlayerUuidColumnType.BINARY
+                : PlayerUuidColumnType.CHAR;
+        playerUuidColumnTypes.put(table, type);
+    }
+
+    private ColumnMeta getColumnMeta(Connection connection, String table, String column) throws SQLException {
+        DatabaseMetaData metaData = connection.getMetaData();
+        try (ResultSet rs = metaData.getColumns(connection.getCatalog(), null, table, column)) {
+            while (rs.next()) {
+                String name = rs.getString("COLUMN_NAME");
+                if (name != null && name.equalsIgnoreCase(column)) {
+                    String typeName = rs.getString("TYPE_NAME");
+                    int size = rs.getInt("COLUMN_SIZE");
+                    return new ColumnMeta(typeName, size);
+                }
+            }
+        }
+        return null;
+    }
+
+    private void migratePlayerUuidColumn(Connection connection, String table) throws SQLException {
+        String temporaryColumn = "player_uuid_text";
+        dropColumnIfExists(connection, table, temporaryColumn);
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("ALTER TABLE `" + table + "` ADD COLUMN `" + temporaryColumn + "` CHAR(36) NULL AFTER player_uuid");
+        }
+        try (PreparedStatement select = connection.prepareStatement(
+                "SELECT id, player_uuid FROM `" + table + "` WHERE player_uuid IS NOT NULL");
+             PreparedStatement update = connection.prepareStatement(
+                     "UPDATE `" + table + "` SET `" + temporaryColumn + "` = ? WHERE id = ?")) {
+            try (ResultSet rs = select.executeQuery()) {
+                int batchCount = 0;
+                while (rs.next()) {
+                    long id = rs.getLong(1);
+                    byte[] bytes = rs.getBytes(2);
+                    UUID uuid = bytesToUuid(bytes);
+                    if (uuid == null) {
+                        continue;
+                    }
+                    update.setString(1, uuid.toString());
+                    update.setLong(2, id);
+                    update.addBatch();
+                    batchCount++;
+                    if (batchCount >= 500) {
+                        update.executeBatch();
+                        batchCount = 0;
+                    }
+                }
+                if (batchCount > 0) {
+                    update.executeBatch();
+                }
+            }
+        }
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("ALTER TABLE `" + table + "` DROP COLUMN `player_uuid`");
+            statement.execute("ALTER TABLE `" + table + "` CHANGE COLUMN `" + temporaryColumn + "` `player_uuid` CHAR(36) NULL");
+        }
+    }
+
+    private void dropColumnIfExists(Connection connection, String table, String column) throws SQLException {
+        Set<String> columns = getExistingColumns(connection, table);
+        if (!columns.contains(column.toLowerCase(Locale.ROOT))) {
+            return;
+        }
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("ALTER TABLE `" + table + "` DROP COLUMN `" + column + "`");
+        }
+    }
+
     private String buildInsertSql(String table) {
         return "INSERT INTO `" + table + "` (occurred_at, event_type, message, player_uuid, player_name, tags, context) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?)";
     }
 
-    private void bindEntry(PreparedStatement ps, DbEntry entry) throws SQLException {
+    private void bindEntry(String table, PreparedStatement ps, DbEntry entry) throws SQLException {
         ps.setTimestamp(1, Timestamp.from(entry.timestamp));
         ps.setString(2, eventTypeFor(entry));
         ps.setString(3, entry.message);
-        if (entry.playerUuid != null) {
-            ps.setBytes(4, uuidToBytes(entry.playerUuid));
-        } else {
-            ps.setNull(4, Types.BINARY);
-        }
+        bindPlayerUuid(table, ps, entry.playerUuid);
         String playerName = sanitizePlayerName(entry.playerName);
         if (playerName != null) {
             ps.setString(5, playerName);
@@ -487,6 +564,27 @@ public final class DatabaseLogWriter implements AutoCloseable {
         }
         ps.setString(6, toJsonArray(entry.tags));
         ps.setString(7, toContextJson(entry));
+    }
+
+    private void bindPlayerUuid(String table, PreparedStatement ps, UUID uuid) throws SQLException {
+        PlayerUuidColumnType type = playerUuidColumnTypeFor(table);
+        if (uuid == null) {
+            if (type == PlayerUuidColumnType.BINARY) {
+                ps.setNull(4, Types.BINARY);
+            } else {
+                ps.setNull(4, Types.VARCHAR);
+            }
+            return;
+        }
+        if (type == PlayerUuidColumnType.BINARY) {
+            ps.setBytes(4, uuidToBytes(uuid));
+        } else {
+            ps.setString(4, uuid.toString());
+        }
+    }
+
+    private PlayerUuidColumnType playerUuidColumnTypeFor(String table) {
+        return playerUuidColumnTypes.getOrDefault(table, PlayerUuidColumnType.CHAR);
     }
 
     private String tableNameFor(String category) {
@@ -623,14 +721,58 @@ public final class DatabaseLogWriter implements AutoCloseable {
         return new UUID(msb, lsb);
     }
 
-    private List<DbRecord> extractRecords(String category, ResultSet rs) throws SQLException {
+    private static UUID stringToUuid(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(trimmed);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
+    private static final class ColumnMeta {
+        private final String typeName;
+        private final int size;
+
+        private ColumnMeta(String typeName, int size) {
+            this.typeName = typeName;
+            this.size = size;
+        }
+
+        boolean isBinary16() {
+            if (typeName == null) {
+                return false;
+            }
+            String normalized = typeName.toUpperCase(Locale.ROOT);
+            if (!normalized.contains("BINARY")) {
+                return false;
+            }
+            return size == 16;
+        }
+    }
+
+    private enum PlayerUuidColumnType {
+        CHAR,
+        BINARY
+    }
+
+    private List<DbRecord> extractRecords(String category, String table, ResultSet rs) throws SQLException {
         List<DbRecord> records = new ArrayList<>();
+        PlayerUuidColumnType columnType = playerUuidColumnTypeFor(table);
         while (rs.next()) {
             Timestamp ts = rs.getTimestamp(1);
             Instant occurredAt = ts != null ? ts.toInstant() : null;
             String eventType = rs.getString(2);
             String message = rs.getString(3);
-            UUID uuid = bytesToUuid(rs.getBytes(4));
+            UUID uuid = columnType == PlayerUuidColumnType.BINARY
+                    ? bytesToUuid(rs.getBytes(4))
+                    : stringToUuid(rs.getString(4));
             String playerName = rs.getString(5);
             String tagsJson = rs.getString(6);
             String contextJson = rs.getString(7);
