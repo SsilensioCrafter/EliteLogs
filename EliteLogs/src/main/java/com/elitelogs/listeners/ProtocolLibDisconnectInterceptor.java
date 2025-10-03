@@ -92,7 +92,7 @@ class ProtocolLibDisconnectInterceptor extends PacketAdapter implements Disconne
                         continue;
                     }
                     PacketType type = (PacketType) field.get(null);
-                    if (type != null) {
+                    if (isRegistered(type)) {
                         packetTypes.add(type);
                     }
                 }
@@ -106,6 +106,25 @@ class ProtocolLibDisconnectInterceptor extends PacketAdapter implements Disconne
             throw new IllegalStateException("No disconnect packets detected in ProtocolLib.");
         }
         return packetTypes.toArray(new PacketType[0]);
+    }
+
+    private static boolean isRegistered(PacketType type) {
+        if (type == null) {
+            return false;
+        }
+        try {
+            Method method = type.getClass().getMethod("isSupported");
+            Object result = method.invoke(type);
+            if (result instanceof Boolean && Boolean.FALSE.equals(result)) {
+                return false;
+            }
+        } catch (NoSuchMethodException ignored) {
+            // Older ProtocolLib builds may not expose isSupported.
+        } catch (Throwable ignored) {
+            // Any failure to ask ProtocolLib about support should fall back to string heuristics below.
+        }
+        String description = String.valueOf(type).toLowerCase(Locale.ROOT);
+        return !description.contains("unregistered");
     }
 
 }
