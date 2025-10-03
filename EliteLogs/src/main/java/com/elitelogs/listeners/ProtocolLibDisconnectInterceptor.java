@@ -21,6 +21,7 @@ import java.util.UUID;
 
 class ProtocolLibDisconnectInterceptor extends PacketAdapter implements DisconnectPacketInterceptor {
     private final LogRouter router;
+    private final PlayerDetailsResolver playerDetailsResolver = new PlayerDetailsResolver();
 
     ProtocolLibDisconnectInterceptor(Plugin plugin, LogRouter router) {
         super(plugin, ListenerPriority.NORMAL, resolveDisconnectPackets());
@@ -44,7 +45,7 @@ class ProtocolLibDisconnectInterceptor extends PacketAdapter implements Disconne
             return;
         }
         DisconnectLogEntry.Builder builder = DisconnectLogEntry.phase("disconnect-screen");
-        applyPlayerMetadata(builder, player);
+        applyPlayerMetadata(builder, playerDetailsResolver.resolve(player));
         if (plain != null && !plain.isEmpty()) {
             builder.attribute("reason", plain);
         }
@@ -210,40 +211,154 @@ class ProtocolLibDisconnectInterceptor extends PacketAdapter implements Disconne
         return !description.contains("unregistered");
     }
 
-    private void applyPlayerMetadata(DisconnectLogEntry.Builder builder, Player player) {
-        if (builder == null || player == null) {
+    private void applyPlayerMetadata(DisconnectLogEntry.Builder builder, PlayerDetails details) {
+        if (builder == null || details == null) {
             return;
         }
 
-        UUID uuid = safeUniqueId(player);
-        String name = safeName(player);
+        UUID uuid = details.getUuid();
+        String name = details.getName();
 
-        if (uuid != null && name != null) {
-            builder.player(uuid, name);
-        } else if (uuid != null) {
-            builder.player(uuid);
+        if (uuid != null && !details.isTemporary()) {
+            if (name != null && !name.isEmpty()) {
+                builder.player(uuid, name);
+            } else {
+                builder.player(uuid);
+            }
         } else if (name != null && !name.isEmpty()) {
             builder.playerName(name);
         }
     }
 
-    private UUID safeUniqueId(Player player) {
-        try {
-            return player.getUniqueId();
-        } catch (UnsupportedOperationException ignored) {
-            // ProtocolLib temporary players do not expose UUIDs during early handshake.
-        } catch (Throwable ignored) {
-            // Any unexpected exception should not break disconnect logging.
-        }
-        return null;
-    }
+    private static final class PlayerDetailsResolver {
+        private static final String TEMPORARY_PLAYER_CLASS =
+                "com.comphenix.protocol.injector.temporary.TemporaryPlayer";
+        private static final String TEMPORARY_FACTORY_CLASS =
+                "com.comphenix.protocol.injector.temporary.TemporaryPlayerFactory";
 
-    private String safeName(Player player) {
-        try {
-            return player.getName();
-        } catch (Throwable ignored) {
+        private volatile boolean attemptedFactoryLookup;
+        private volatile boolean attemptedMarkerLookup;
+        private Method temporaryCheckMethod;
+        private Class<?> temporaryPlayerMarker;
+
+        PlayerDetails resolve(Player player) {
+            if (player == null) {
+                return PlayerDetails.empty();
+            }
+
+            boolean temporary = isTemporary(player);
+            UUID uuid = temporary ? null : safeUniqueId(player);
+            String name = safeName(player);
+            return new PlayerDetails(uuid, name, temporary);
+        }
+
+        private boolean isTemporary(Player player) {
+            if (player == null) {
+                return false;
+            }
+
+            Class<?> marker = lookupTemporaryMarker();
+            if (marker != null && marker.isInstance(player)) {
+                return true;
+            }
+
+            if (player.getClass().getName().startsWith(TEMPORARY_PLAYER_CLASS)) {
+                return true;
+            }
+
+            Method checker = lookupTemporaryChecker();
+            if (checker != null) {
+                try {
+                    Object result = checker.invoke(null, player);
+                    if (result instanceof Boolean) {
+                        return (Boolean) result;
+                    }
+                } catch (Throwable ignored) {
+                    // Fall back to heuristics when ProtocolLib's helper cannot be reached.
+                }
+            }
+
+            return false;
+        }
+
+        private Method lookupTemporaryChecker() {
+            if (attemptedFactoryLookup) {
+                return temporaryCheckMethod;
+            }
+            attemptedFactoryLookup = true;
+            try {
+                Class<?> factory = Class.forName(TEMPORARY_FACTORY_CLASS);
+                temporaryCheckMethod = factory.getMethod("isTemporaryPlayer", Player.class);
+            } catch (ClassNotFoundException | NoSuchMethodException ignored) {
+                temporaryCheckMethod = null;
+            } catch (Throwable ignored) {
+                temporaryCheckMethod = null;
+            }
+            return temporaryCheckMethod;
+        }
+
+        private Class<?> lookupTemporaryMarker() {
+            if (attemptedMarkerLookup) {
+                return temporaryPlayerMarker;
+            }
+            attemptedMarkerLookup = true;
+            try {
+                temporaryPlayerMarker = Class.forName(TEMPORARY_PLAYER_CLASS);
+            } catch (ClassNotFoundException ignored) {
+                temporaryPlayerMarker = null;
+            } catch (Throwable ignored) {
+                temporaryPlayerMarker = null;
+            }
+            return temporaryPlayerMarker;
+        }
+
+        private UUID safeUniqueId(Player player) {
+            try {
+                return player.getUniqueId();
+            } catch (UnsupportedOperationException ignored) {
+                // ProtocolLib temporary players do not expose UUIDs during early handshake.
+            } catch (Throwable ignored) {
+                // Any unexpected exception should not break disconnect logging.
+            }
             return null;
         }
+
+        private String safeName(Player player) {
+            try {
+                return player.getName();
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }
     }
 
+    private static final class PlayerDetails {
+        private static final PlayerDetails EMPTY = new PlayerDetails(null, null, false);
+
+        private final UUID uuid;
+        private final String name;
+        private final boolean temporary;
+
+        private PlayerDetails(UUID uuid, String name, boolean temporary) {
+            this.uuid = uuid;
+            this.name = name;
+            this.temporary = temporary;
+        }
+
+        static PlayerDetails empty() {
+            return EMPTY;
+        }
+
+        UUID getUuid() {
+            return uuid;
+        }
+
+        String getName() {
+            return name;
+        }
+
+        boolean isTemporary() {
+            return temporary;
+        }
+    }
 }
