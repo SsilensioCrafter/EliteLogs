@@ -324,8 +324,8 @@ watchdog:
 ## 🛠️ Building
 
 1. Make sure JDK 8+ and Maven are installed.
-2. Run `mvn -DskipTests package` from the repository root.
-   - The Maven reactor builds the lightweight ProtocolLib 5.1.0 stub module before the plugin, so the project compiles offline without committing binary jars. Production servers still need the real ProtocolLib plugin to capture DISCONNECT packets.
+2. Run `mvn -f EliteLogs/pom.xml -DskipTests package` from the repository root (or `cd EliteLogs` first and run `mvn -DskipTests package`).
+   - Minimal ProtocolLib 5.1.0 APIs live in `EliteLogs/src/stubs/java`; the build helper adds them during compilation and the jar plugin excludes them from the final artifact. Production servers still need the real ProtocolLib plugin to capture DISCONNECT packets.
 
 ---
 

@@ -9,10 +9,9 @@
     <packaging>pom</packaging>
 
     <name>EliteLogs Build</name>
-    <description>Aggregated build that compiles the ProtocolLib stub before the plugin.</description>
+    <description>Aggregated build convenience wrapper for the EliteLogs plugin.</description>
 
     <modules>
-        <module>stubs/protocollib</module>
         <module>EliteLogs</module>
     </modules>
 </project>
