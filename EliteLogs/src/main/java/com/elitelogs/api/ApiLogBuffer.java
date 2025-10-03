@@ -12,7 +12,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-final class ApiLogBuffer implements LogRouter.SinkListener {
+public final class ApiLogBuffer implements LogRouter.SinkListener {
     private final Map<String, CategoryBuffer> buffers = new ConcurrentHashMap<>();
     private final AtomicInteger capacity = new AtomicInteger(250);
 
@@ -33,15 +33,15 @@ final class ApiLogBuffer implements LogRouter.SinkListener {
         }
     }
 
-    int getCapacity() {
+    public int getCapacity() {
         return capacity.get();
     }
 
-    Set<String> getCategories() {
+    public Set<String> getCategories() {
         return Collections.unmodifiableSet(buffers.keySet());
     }
 
-    List<String> getRecent(String category, int limit) {
+    public List<String> getRecent(String category, int limit) {
         CategoryBuffer buffer = buffers.get(category);
         if (buffer == null) {
             return Collections.emptyList();

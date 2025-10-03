@@ -17,7 +17,8 @@ import java.util.logging.Logger;
 public class DataDirectoryManager {
     private static final List<String> FOLDERS = Arrays.asList(
             "logs/warns", "logs/errors", "logs/chat", "logs/commands", "logs/players",
-            "logs/combat", "logs/inventory", "logs/economy", "logs/stats", "logs/console", "logs/rcon", "logs/suppressed",
+            "logs/disconnects", "logs/combat", "logs/inventory", "logs/economy", "logs/stats",
+            "logs/console", "logs/rcon", "logs/suppressed",
             "reports/sessions", "reports/inspector",
             "archive", "exports", "lang"
     );

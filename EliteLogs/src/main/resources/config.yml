@@ -80,6 +80,37 @@ logs:
   disconnects:
     capture-screen: true  # Requires ProtocolLib, records server disconnect screens + raw payloads
 
+# ── Database mirroring ───────────────────────────────────────────────────────
+# Optional MySQL storage that mirrors every entry without touching filesystem
+# rotation. Each enabled log type is stored in its own table using the prefix
+# below (for example, "elitelogs_chat" or "elitelogs_errors").
+storage:
+  database:
+    enabled: false
+    table-prefix: "elitelogs_"
+    auto-upgrade: true       # Keeps tables/indexes up to date and registers new log types automatically
+    batching:
+      size: 100
+      flush-interval-ticks: 2  # How often queued rows are flushed (1 tick = 50ms)
+    connection:
+      jdbc-url: ""           # Leave blank to compose from the host/port/database below
+      host: "127.0.0.1"
+      port: 3306
+      database: "elitelogs"
+      username: "elitelogs"
+      password: ""
+      properties:
+        useSSL: false
+        allowPublicKeyRetrieval: true
+        rewriteBatchedStatements: true
+        serverTimezone: UTC
+        characterEncoding: UTF-8
+    pool:
+      minimum-idle: 1
+      maximum-pool-size: 8
+      connection-timeout-millis: 8000
+      max-lifetime-millis: 1800000
+
 # ── Session reports ────────────────────────────────────────────────────────────
 # Save interval defines how often session YAML is written. Disable players/global
 # individually if you only need one perspective.
@@ -111,7 +142,38 @@ api:
   bind: "127.0.0.1"
   port: 9173
   auth-token: ""       # Leave blank to auto-generate, manage via /elogs apikey
-  log-history: 250
+  log-history: 250      # Size of the in-memory buffer used for instant responses
+  default-source: buffer
+  sources:
+    buffer:
+      enabled: true
+    files:
+      enabled: true
+      root: logs        # Relative path under the plugin data folder for file lookups
+    database:
+      enabled: true
+  endpoints:
+    status:
+      enabled: true
+    metrics:
+      enabled: true
+    watchdog:
+      enabled: true
+    sessions:
+      enabled: true
+    logs:
+      enabled: true
+      default-limit: 250
+      allow-sources:
+        - buffer
+        - files
+        - database
+    search:
+      enabled: true
+      default-limit: 250
+      allow-sources:
+        - database
+        - files
 
 # ── Chat suppressor ────────────────────────────────────────────────────────────
 # Filters spam by caching recent messages. mode can be "blacklist" or

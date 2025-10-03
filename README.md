@@ -65,8 +65,10 @@ Displays the current tracked session summaries, including duration and active pl
 
 ## ✨ Features at a Glance
 - Comprehensive logging: chat, commands, economy, combat, inventory, stats, console, sessions, warnings, errors, disconnects, and more.
+- Optional MySQL mirroring writes each log type into its own table (for example `elitelogs_chat` or `elitelogs_errors`) with JSON tag arrays, structured context objects, configurable prefixes, and automatic schema/index upgrades for ultra-fast dashboards and API calls.
 - Dedicated `/logs/disconnects` folder captures login denials, kicks, resource-pack responses, and even server disconnect screens (via ProtocolLib when available) with normalized key/value fields (`result`, `ip`, `reason`, `source`, etc.).
 - Optional ProtocolLib capture can now be toggled through `logs.disconnects.capture-screen` for hosts that prefer to disable JSON snooping.
+- Auto-detects ProtocolLib on startup (declared as a soft dependency) and logs whether disconnect screen capture is active, so you immediately know if packet hooks are in effect.
 - Per-player logs with dedicated folders (`logs/<module>/players/<uuid>`) and session histories (`logs/players/<playerName>/sessions`).
 - Global daily logs (`logs/<module>/global-YYYY-MM-DD.log`) for quick server-wide insights.
 - Configurable modules — enable or disable exactly what you need via `config.yml`.
@@ -97,6 +99,15 @@ Displays the current tracked session summaries, including duration and active pl
 - **console** — a rotating copy of the live console for forensics.
 - **rcon** — everything executed through remote console connections.
 - **suppressed** — overflow bucket that stores messages muted elsewhere (handy for auditing filters).
+
+### MySQL storage (`storage.database`)
+- `enabled` + `connection.*`: once enabled, every active log type is mirrored without touching the filesystem pipeline.
+- `table-prefix`: change the namespace that precedes each per-log table (`elitelogs_chat`, `elitelogs_errors`, ...).
+- `batching.size`: number of entries pushed per flush for minimal round-trips.
+- `batching.flush-interval-ticks`: controls how frequently the async worker flushes queued rows (1 tick = 50 ms).
+- `auto-upgrade`: when true, tables, indexes, and the registry are created/updated automatically on connect so dashboards always have the right shape.
+- Schema per table: `occurred_at`, `event_type`, `message`, `player_uuid`, `player_name`, `tags` (JSON array), and `context` (JSON object with category/player/tag keys).
+- Registry tables (`<prefix>schema_info`, `<prefix>registry`) are maintained automatically to track schema version and the mapping between categories and tables.
 
 ### Disconnect pipeline
 - Phases recorded: `prelogin-deny`, `login-deny`, `kick`, `quit`, `resource-pack`, `disconnect-screen`.
@@ -156,19 +167,27 @@ Displays the current tracked session summaries, including duration and active pl
 ---
 
 ## 🔌 HTTP API
-EliteLogs ships with an optional HTTP server so your SsilensioWeb admin panel (or any other dashboard) can pull data straight from the plugin. Enable it by flipping the `api.enabled` flag in `config.yml` and adjusting the bind address/port if needed.
+EliteLogs ships with a modular HTTP server so your SsilensioWeb admin panel (or any other dashboard) can pull data straight from the plugin. Flip the `api.enabled` flag in `config.yml`, pick which endpoints should boot, and decide whether they read from the in-memory buffer, flat files, or the MySQL mirror.
 
 ### Endpoints
 - `GET /api/v1/status` — plugin version, enabled modules, and configuration flags.
 - `GET /api/v1/metrics` — live TPS/CPU/memory plus the active session counters and watchdog thresholds.
 - `GET /api/v1/watchdog` — watchdog thresholds, trigger timings, error counters, and the most recent trigger reason.
-- `GET /api/v1/logs` — list of log categories currently buffered in memory.
-- `GET /api/v1/logs/<category>?limit=100` — most recent lines for a category (limit defaults to the configured `log-history`).
+- `GET /api/v1/sessions` — current session snapshot plus the most recent YAML reports saved to disk.
+- `GET /api/v1/logs` — catalog of categories, available data sources, and the default provider for log lookups.
+- `GET /api/v1/logs/<category>` — fetch the newest records for a category. Supports `limit`, `source=buffer|files|database`, and `q=<substring>` to filter without hitting the search endpoint.
+- `GET /api/v1/logs/search?category=<name>&q=<term>` — server-side substring search backed by whichever provider you select.
+
+### Data sources & tuning
+- `default-source` picks the provider the API uses when a request does not specify `source=`.
+- `sources` lets you enable/disable the live buffer, filesystem reader, and MySQL mirror independently (and point the file reader at a custom directory if needed).
+- Each endpoint exposes `allow-sources` so you can pin sensitive calls (for example, `/logs/search`) to the database only while serving `/logs` from cached files.
+- `default-limit` per endpoint caps how many rows are returned when the client does not pass `limit=`.
 
 ### Authentication
 - Leave `auth-token` empty and EliteLogs will auto-generate a strong token on startup; use `/elogs apikey show` (or `regenerate`) to reveal or rotate it safely.
 - Provide the token via the `X-API-Key` header (preferred) or the `token` query parameter.
-- `log-history` controls how many lines are cached per category for instant API responses.
+- `log-history` controls how many lines the in-memory buffer keeps for instant API responses (file/database providers are not limited by it).
 - Bind the server to `127.0.0.1` when using a reverse proxy; use `0.0.0.0` only if you really want to expose it publicly.
 
 ---
@@ -273,6 +292,34 @@ logs:
   disconnects:
     capture-screen: true      # Requires ProtocolLib to read the disconnect screen text
 
+# Database mirroring (optional MySQL)
+storage:
+  database:
+    enabled: false
+    table-prefix: "elitelogs_"
+    auto-upgrade: true        # Keep registry and tables aligned with plugin expectations
+    batching:
+      size: 100               # Entries flushed per batch
+      flush-interval-ticks: 2 # Queue flush cadence (1 tick = 50 ms)
+    connection:
+      jdbc-url: ""           # Leave empty to auto-compose from the values below
+      host: "127.0.0.1"      # Hostname or IP of your MySQL server
+      port: 3306              # MySQL port
+      database: "elitelogs"  # Database/schema name
+      username: "elitelogs"
+      password: ""
+      properties:
+        useSSL: false
+        allowPublicKeyRetrieval: true
+        rewriteBatchedStatements: true
+        serverTimezone: UTC
+        characterEncoding: UTF-8
+    pool:
+      minimum-idle: 1
+      maximum-pool-size: 8
+      connection-timeout-millis: 8000
+      max-lifetime-millis: 1800000
+
 # Player sessions summary
 sessions:
   enabled: true
@@ -299,7 +346,38 @@ api:
   bind: "127.0.0.1"
   port: 9173
   auth-token: ""             # Leave blank to auto-generate, manage via /elogs apikey
-  log-history: 250
+  log-history: 250           # In-memory buffer size for instant responses
+  default-source: buffer     # buffer | files | database
+  sources:
+    buffer:
+      enabled: true          # Live tail of everything passing through the router
+    files:
+      enabled: true
+      root: logs             # Where the file provider should scan for categories
+    database:
+      enabled: true          # Requires storage.database.enabled = true
+  endpoints:
+    status:
+      enabled: true
+    metrics:
+      enabled: true
+    watchdog:
+      enabled: true
+    sessions:
+      enabled: true
+    logs:
+      enabled: true
+      default-limit: 250
+      allow-sources:
+        - buffer
+        - files
+        - database
+    search:
+      enabled: true
+      default-limit: 250
+      allow-sources:
+        - database
+        - files
 
 # Message suppressor / spam filter
 suppressor:
@@ -324,8 +402,8 @@ watchdog:
 
 ## 🛠️ Building
 
-1. Make sure JDK 8+ and Maven are installed.
-2. Run `mvn -f EliteLogs/pom.xml -DskipTests package` from the repository root (or `cd EliteLogs` first and run `mvn -DskipTests package`).
+1. Make sure JDK 17+ and Maven are installed (Spigot 1.20 requires Java 17).
+2. Run `mvn -f EliteLogs/pom.xml -DskipTests package` from the repository root (or `cd EliteLogs` first and then execute `mvn -DskipTests package`).
    - Minimal ProtocolLib 5.1.0 APIs live in `EliteLogs/src/stubs/java`; the build helper adds them during compilation and the jar plugin excludes them from the final artifact. Production servers still need the real ProtocolLib plugin to capture DISCONNECT packets.
 
 ---

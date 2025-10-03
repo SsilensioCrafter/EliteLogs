@@ -1,6 +1,13 @@
 package com.elitelogs.api;
 
 import com.elitelogs.EliteLogsPlugin;
+import com.elitelogs.api.ApiSettings.EndpointKey;
+import com.elitelogs.api.ApiSettings.EndpointSettings;
+import com.elitelogs.api.ApiSettings.SourceSettings;
+import com.elitelogs.api.provider.BufferLogProvider;
+import com.elitelogs.api.provider.DatabaseLogProvider;
+import com.elitelogs.api.provider.FileLogProvider;
+import com.elitelogs.api.provider.LogDataProvider;
 import com.elitelogs.compat.ServerCompat;
 import com.elitelogs.logging.LogRouter;
 import com.elitelogs.metrics.MetricsCollector;
@@ -12,18 +19,22 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.bukkit.configuration.ConfigurationSection;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -43,7 +54,7 @@ public final class ApiServer {
 
     private volatile HttpServer server;
     private volatile ExecutorService executor;
-    private volatile ApiConfig activeConfig;
+    private volatile RuntimeState runtime;
 
     public ApiServer(EliteLogsPlugin plugin, LogRouter logRouter, MetricsCollector metricsCollector,
                      SessionManager sessionManager, Watchdog watchdog) {
@@ -69,26 +80,16 @@ public final class ApiServer {
     }
 
     private void applyConfig() {
-        int history = plugin.getConfig().getInt("api.log-history", 250);
-        logBuffer.setCapacity(history);
+        ApiSettings settings = ApiSettings.fromConfig(plugin.getConfig());
+        logBuffer.setCapacity(settings.getLogHistory());
+        RuntimeState desired = buildRuntimeState(settings);
+        this.runtime = desired;
 
-        boolean enabled = plugin.getConfig().getBoolean("api.enabled", false);
-        String bind = plugin.getConfig().getString("api.bind", "127.0.0.1");
-        int port = plugin.getConfig().getInt("api.port", 9173);
-        String tokenRaw = plugin.getConfig().getString("api.auth-token", "");
-        String token = tokenRaw != null && !tokenRaw.trim().isEmpty() ? tokenRaw.trim() : null;
-
-        if (!enabled) {
+        if (!settings.isEnabled()) {
             if (server != null) {
                 plugin.getLogger().info("[EliteLogs] API server disabled via config");
             }
             stopServer();
-            activeConfig = new ApiConfig(bind, port, token, false);
-            return;
-        }
-
-        ApiConfig desired = new ApiConfig(bind, port, token, true);
-        if (desired.equals(activeConfig) && server != null) {
             return;
         }
 
@@ -96,23 +97,64 @@ public final class ApiServer {
         startServer(desired);
     }
 
-    private void startServer(ApiConfig config) {
+    private RuntimeState buildRuntimeState(ApiSettings settings) {
+        Map<String, LogDataProvider> providers = new LinkedHashMap<>();
+        for (SourceSettings source : settings.getSources().values()) {
+            if (!source.isEnabled()) {
+                continue;
+            }
+            String name = source.getName();
+            switch (name) {
+                case "buffer":
+                    providers.put(name, new BufferLogProvider(logBuffer));
+                    break;
+                case "files":
+                    providers.put(name, new FileLogProvider(plugin, logRouter, source.getRootPath()));
+                    break;
+                case "database":
+                    providers.put(name, new DatabaseLogProvider(logRouter));
+                    break;
+                default:
+                    providers.put(name, new BufferLogProvider(logBuffer));
+                    break;
+            }
+        }
+        if (providers.isEmpty()) {
+            providers.put("buffer", new BufferLogProvider(logBuffer));
+        }
+        return new RuntimeState(settings, settings.getBind(), settings.getPort(), settings.getAuthToken(), providers);
+    }
+
+    private void startServer(RuntimeState state) {
         try {
-            HttpServer httpServer = HttpServer.create(new InetSocketAddress(config.bind, config.port), 0);
-            httpServer.createContext("/api/v1/status", exchange -> handleSafely(exchange, this::handleStatus));
-            httpServer.createContext("/api/v1/metrics", exchange -> handleSafely(exchange, this::handleMetrics));
-            httpServer.createContext("/api/v1/watchdog", exchange -> handleSafely(exchange, this::handleWatchdog));
-            httpServer.createContext("/api/v1/logs", exchange -> handleSafely(exchange, this::handleLogs));
+            HttpServer httpServer = HttpServer.create(new InetSocketAddress(state.bind, state.port), 0);
+            if (state.settings.getEndpoint(EndpointKey.STATUS).isEnabled()) {
+                httpServer.createContext("/api/v1/status", exchange -> handleSafely(exchange, this::handleStatus));
+            }
+            if (state.settings.getEndpoint(EndpointKey.METRICS).isEnabled()) {
+                httpServer.createContext("/api/v1/metrics", exchange -> handleSafely(exchange, this::handleMetrics));
+            }
+            if (state.settings.getEndpoint(EndpointKey.WATCHDOG).isEnabled()) {
+                httpServer.createContext("/api/v1/watchdog", exchange -> handleSafely(exchange, this::handleWatchdog));
+            }
+            if (state.settings.getEndpoint(EndpointKey.SESSIONS).isEnabled()) {
+                httpServer.createContext("/api/v1/sessions", exchange -> handleSafely(exchange, this::handleSessions));
+            }
+            if (state.settings.getEndpoint(EndpointKey.LOGS).isEnabled()) {
+                httpServer.createContext("/api/v1/logs", exchange -> handleSafely(exchange, this::handleLogs));
+            }
+            if (state.settings.getEndpoint(EndpointKey.SEARCH).isEnabled()) {
+                httpServer.createContext("/api/v1/logs/search", exchange -> handleSafely(exchange, this::handleLogsSearch));
+            }
             ExecutorService exec = Executors.newCachedThreadPool(new ApiThreadFactory());
             httpServer.setExecutor(exec);
             httpServer.start();
             this.server = httpServer;
             this.executor = exec;
-            this.activeConfig = config;
-            plugin.getLogger().info("[EliteLogs] API listening on " + config.bind + ":" + config.port);
+            this.runtime = state;
+            plugin.getLogger().info("[EliteLogs] API listening on " + state.bind + ":" + state.port);
         } catch (IOException | IllegalArgumentException ex) {
             plugin.getLogger().severe("[EliteLogs] Failed to start API server: " + ex.getMessage());
-            this.activeConfig = config;
             stopServer();
         }
     }
@@ -185,8 +227,23 @@ public final class ApiServer {
         sendJson(exchange, 200, payload);
     }
 
+    private void handleSessions(HttpExchange exchange) throws IOException {
+        if (!requireGet(exchange) || !authenticate(exchange)) {
+            return;
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("current", buildSessionSnapshot());
+        payload.put("history", buildSessionHistory(10));
+        sendJson(exchange, 200, payload);
+    }
+
     private void handleLogs(HttpExchange exchange) throws IOException {
         if (!requireGet(exchange) || !authenticate(exchange)) {
+            return;
+        }
+        RuntimeState state = this.runtime;
+        if (state == null) {
+            sendError(exchange, 503, "API not initialised");
             return;
         }
         String path = exchange.getRequestURI().getPath();
@@ -195,10 +252,13 @@ public final class ApiServer {
             return;
         }
         if (path.equals("/api/v1/logs") || path.equals("/api/v1/logs/")) {
-            List<String> categories = new ArrayList<>(logBuffer.getCategories());
-            categories.sort(Comparator.naturalOrder());
             Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("categories", categories);
+            EndpointSettings endpoint = state.settings.getEndpoint(EndpointKey.LOGS);
+            payload.put("defaultSource", state.settings.resolveDefaultSourceFor(EndpointKey.LOGS));
+            payload.put("allowedSources", endpoint != null ? endpoint.getAllowedSources() : Collections.emptyList());
+            payload.put("availableSources", describeAvailableSources(state, EndpointKey.LOGS));
+            payload.put("sources", buildSourceCatalog(state));
+            payload.put("categories", buildKnownCategories());
             sendJson(exchange, 200, payload);
             return;
         }
@@ -212,114 +272,78 @@ public final class ApiServer {
             return;
         }
         String category = urlDecode(encoded);
-        int limit = parseLimit(exchange.getRequestURI().getRawQuery(), logBuffer.getCapacity());
-        limit = Math.max(1, Math.min(limit, logBuffer.getCapacity()));
-        List<String> lines = logBuffer.getRecent(category, limit);
+        Map<String, List<String>> query = parseQueryParameters(exchange.getRequestURI().getRawQuery());
+        String requestedSource = firstParam(query, "source");
+        LogDataProvider provider = resolveProvider(state, EndpointKey.LOGS, requestedSource);
+        if (provider == null) {
+            sendError(exchange, 404, "Source unavailable");
+            return;
+        }
+        if (!provider.isAvailable()) {
+            sendError(exchange, 503, "Source temporarily unavailable");
+            return;
+        }
+        EndpointSettings endpoint = state.settings.getEndpoint(EndpointKey.LOGS);
+        int limit = resolveLimit(query, endpoint);
+        String queryText = firstParam(query, "q");
+        List<Map<String, Object>> records = (queryText != null && !queryText.trim().isEmpty())
+                ? provider.search(category, queryText, limit)
+                : provider.fetch(category, limit);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("category", category);
+        payload.put("source", provider.getName());
         payload.put("limit", limit);
-        payload.put("size", lines.size());
-        payload.put("lines", lines);
+        if (queryText != null && !queryText.trim().isEmpty()) {
+            payload.put("query", queryText);
+        }
+        payload.put("availableSources", describeAvailableSources(state, EndpointKey.LOGS));
+        payload.put("size", records.size());
+        payload.put("records", records);
         sendJson(exchange, 200, payload);
     }
 
-    private int parseLimit(String rawQuery, int fallback) {
-        if (rawQuery == null || rawQuery.isEmpty()) {
-            return fallback;
+    private void handleLogsSearch(HttpExchange exchange) throws IOException {
+        if (!requireGet(exchange) || !authenticate(exchange)) {
+            return;
         }
-        StringTokenizer tokenizer = new StringTokenizer(rawQuery, "&");
-        while (tokenizer.hasMoreTokens()) {
-            String token = tokenizer.nextToken();
-            int eq = token.indexOf('=');
-            if (eq <= 0) {
-                continue;
-            }
-            String key = token.substring(0, eq);
-            if (!"limit".equals(key)) {
-                continue;
-            }
-            String value = token.substring(eq + 1);
-            try {
-                return Integer.parseInt(urlDecode(value));
-            } catch (IllegalArgumentException ignored) {
-                return fallback;
-            }
+        RuntimeState state = this.runtime;
+        if (state == null) {
+            sendError(exchange, 503, "API not initialised");
+            return;
         }
-        return fallback;
-    }
-
-    private String urlDecode(String value) {
-        try {
-            return URLDecoder.decode(value, StandardCharsets.UTF_8.name());
-        } catch (UnsupportedEncodingException ex) {
-            throw new IllegalStateException("UTF-8 not supported", ex);
+        Map<String, List<String>> query = parseQueryParameters(exchange.getRequestURI().getRawQuery());
+        String category = firstParam(query, "category");
+        if (category == null || category.trim().isEmpty()) {
+            sendError(exchange, 400, "Missing category parameter");
+            return;
         }
-    }
-
-    private boolean requireGet(HttpExchange exchange) throws IOException {
-        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-            exchange.getResponseHeaders().set("Allow", "GET");
-            sendError(exchange, 405, "Method not allowed");
-            return false;
+        String q = firstParam(query, "q");
+        if (q == null || q.trim().isEmpty()) {
+            sendError(exchange, 400, "Missing q parameter");
+            return;
         }
-        return true;
-    }
-
-    private boolean authenticate(HttpExchange exchange) throws IOException {
-        ApiConfig config = this.activeConfig;
-        if (config == null || config.token == null) {
-            return true;
+        String requestedSource = firstParam(query, "source");
+        LogDataProvider provider = resolveProvider(state, EndpointKey.SEARCH, requestedSource);
+        if (provider == null) {
+            sendError(exchange, 404, "Source unavailable");
+            return;
         }
-        Headers headers = exchange.getRequestHeaders();
-        String provided = headers.getFirst("X-API-Key");
-        if (provided == null || provided.isEmpty()) {
-            provided = getQueryParam(exchange.getRequestURI().getRawQuery(), "token");
+        if (!provider.isAvailable()) {
+            sendError(exchange, 503, "Source temporarily unavailable");
+            return;
         }
-        if (provided != null && provided.equals(config.token)) {
-            return true;
-        }
-        sendError(exchange, 401, "Unauthorized");
-        return false;
-    }
-
-    private String getQueryParam(String rawQuery, String name) {
-        if (rawQuery == null || rawQuery.isEmpty()) {
-            return null;
-        }
-        StringTokenizer tokenizer = new StringTokenizer(rawQuery, "&");
-        while (tokenizer.hasMoreTokens()) {
-            String token = tokenizer.nextToken();
-            int eq = token.indexOf('=');
-            if (eq <= 0) {
-                continue;
-            }
-            String key = token.substring(0, eq);
-            if (!name.equals(key)) {
-                continue;
-            }
-            String value = token.substring(eq + 1);
-            try {
-                return urlDecode(value);
-            } catch (IllegalArgumentException ignored) {
-                return null;
-            }
-        }
-        return null;
-    }
-
-    private void sendError(HttpExchange exchange, int status, String message) throws IOException {
+        EndpointSettings endpoint = state.settings.getEndpoint(EndpointKey.SEARCH);
+        int limit = resolveLimit(query, endpoint);
+        List<Map<String, Object>> records = provider.search(category, q, limit);
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("error", message);
-        sendJson(exchange, status, payload);
-    }
-
-    private void sendJson(HttpExchange exchange, int status, Object payload) throws IOException {
-        markResponded(exchange);
-        JsonResponse.send(exchange, status, JsonUtil.stringify(payload));
-    }
-
-    private void markResponded(HttpExchange exchange) {
-        exchange.setAttribute(ATTR_RESPONSE_SENT, Boolean.TRUE);
+        payload.put("category", category);
+        payload.put("query", q);
+        payload.put("source", provider.getName());
+        payload.put("limit", limit);
+        payload.put("availableSources", describeAvailableSources(state, EndpointKey.SEARCH));
+        payload.put("size", records.size());
+        payload.put("records", records);
+        sendJson(exchange, 200, payload);
     }
 
     private Map<String, Object> buildPluginInfo() {
@@ -412,18 +436,18 @@ public final class ApiServer {
     }
 
     private Map<String, Object> buildApiInfo() {
+        RuntimeState state = this.runtime;
         Map<String, Object> data = new LinkedHashMap<>();
-        ApiConfig config = this.activeConfig;
-        boolean running = server != null;
-        data.put("enabled", running);
-        String fallbackBind = plugin.getConfig().getString("api.bind");
-        if (fallbackBind == null || fallbackBind.trim().isEmpty()) {
-            fallbackBind = "127.0.0.1";
-        }
-        data.put("bind", config != null ? config.bind : fallbackBind);
-        data.put("port", config != null ? config.port : plugin.getConfig().getInt("api.port", 9173));
-        data.put("requiresAuth", config != null && config.token != null);
+        boolean running = server != null && state != null && state.settings.isEnabled();
+        data.put("running", running);
+        String bind = state != null ? state.bind : plugin.getConfig().getString("api.bind", "127.0.0.1");
+        data.put("bind", bind);
+        data.put("port", state != null ? state.port : plugin.getConfig().getInt("api.port", 9173));
+        data.put("requiresAuth", state != null && state.token != null);
         data.put("logHistory", logBuffer.getCapacity());
+        data.put("defaultSource", state != null ? state.settings.getDefaultSource() : null);
+        data.put("sources", buildSourceCatalog(state));
+        data.put("endpoints", buildEndpointCatalog(state));
         return data;
     }
 
@@ -439,70 +463,279 @@ public final class ApiServer {
         return data;
     }
 
+    private List<Map<String, Object>> buildSessionHistory(int limit) {
+        File folder = new File(plugin.getDataFolder(), "reports/sessions");
+        if (!folder.exists() || !folder.isDirectory()) {
+            return Collections.emptyList();
+        }
+        File[] files = folder.listFiles(file -> file.isFile() && file.getName().endsWith(".yml") && !"last-session.yml".equals(file.getName()));
+        if (files == null || files.length == 0) {
+            return Collections.emptyList();
+        }
+        List<File> sorted = new ArrayList<>();
+        Collections.addAll(sorted, files);
+        sorted.sort(Comparator.comparingLong(File::lastModified).reversed());
+        List<Map<String, Object>> history = new ArrayList<>();
+        int max = Math.min(limit, sorted.size());
+        for (int i = 0; i < max; i++) {
+            File file = sorted.get(i);
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("file", file.getName());
+            entry.put("lastModified", Instant.ofEpochMilli(file.lastModified()).toString());
+            entry.put("size", file.length());
+            history.add(entry);
+        }
+        return history;
+    }
+
+    private List<String> buildKnownCategories() {
+        Set<String> categories = new LinkedHashSet<>(logRouter.getActiveCategories());
+        categories.addAll(logBuffer.getCategories());
+        List<String> list = new ArrayList<>(categories);
+        Collections.sort(list);
+        return list;
+    }
+
+    private Map<String, Object> buildSourceCatalog(RuntimeState state) {
+        Map<String, Object> catalog = new LinkedHashMap<>();
+        ApiSettings settings = state != null ? state.settings : ApiSettings.fromConfig(plugin.getConfig());
+        for (Map.Entry<String, SourceSettings> entry : settings.getSources().entrySet()) {
+            String name = entry.getKey();
+            SourceSettings cfg = entry.getValue();
+            Map<String, Object> info = new LinkedHashMap<>();
+            info.put("enabled", cfg.isEnabled());
+            if (cfg.getRootPath() != null) {
+                info.put("root", cfg.getRootPath());
+            }
+            LogDataProvider provider = state != null ? state.providers.get(name) : null;
+            boolean available = provider != null && provider.isAvailable();
+            info.put("available", available);
+            if (available) {
+                info.put("categories", provider.listCategories());
+            }
+            catalog.put(name, info);
+        }
+        return catalog;
+    }
+
+    private Map<String, Object> buildEndpointCatalog(RuntimeState state) {
+        Map<String, Object> catalog = new LinkedHashMap<>();
+        ApiSettings settings = state != null ? state.settings : ApiSettings.fromConfig(plugin.getConfig());
+        for (EndpointKey key : EndpointKey.values()) {
+            EndpointSettings endpoint = settings.getEndpoint(key);
+            if (endpoint == null) {
+                continue;
+            }
+            Map<String, Object> info = new LinkedHashMap<>();
+            info.put("enabled", endpoint.isEnabled());
+            info.put("allowedSources", endpoint.getAllowedSources());
+            if (endpoint.getDefaultLimit() > 0) {
+                info.put("defaultLimit", endpoint.getDefaultLimit());
+            }
+            catalog.put(key.getKey(), info);
+        }
+        return catalog;
+    }
+
+    private boolean requireGet(HttpExchange exchange) throws IOException {
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            exchange.getResponseHeaders().set("Allow", "GET");
+            sendError(exchange, 405, "Method not allowed");
+            return false;
+        }
+        return true;
+    }
+
+    private boolean authenticate(HttpExchange exchange) throws IOException {
+        RuntimeState state = this.runtime;
+        String token = state != null ? state.token : null;
+        if (token == null) {
+            return true;
+        }
+        Headers headers = exchange.getRequestHeaders();
+        String provided = headers.getFirst("X-API-Key");
+        if (provided == null || provided.isEmpty()) {
+            provided = firstParam(parseQueryParameters(exchange.getRequestURI().getRawQuery()), "token");
+        }
+        if (provided != null && provided.equals(token)) {
+            return true;
+        }
+        sendError(exchange, 401, "Unauthorized");
+        return false;
+    }
+
+    private Map<String, List<String>> parseQueryParameters(String rawQuery) {
+        Map<String, List<String>> params = new LinkedHashMap<>();
+        if (rawQuery == null || rawQuery.isEmpty()) {
+            return params;
+        }
+        StringTokenizer tokenizer = new StringTokenizer(rawQuery, "&");
+        while (tokenizer.hasMoreTokens()) {
+            String token = tokenizer.nextToken();
+            if (token.isEmpty()) {
+                continue;
+            }
+            int eq = token.indexOf('=');
+            String key;
+            String value;
+            if (eq >= 0) {
+                key = urlDecode(token.substring(0, eq));
+                value = urlDecode(token.substring(eq + 1));
+            } else {
+                key = urlDecode(token);
+                value = "";
+            }
+            params.computeIfAbsent(key, ignored -> new ArrayList<>()).add(value);
+        }
+        return params;
+    }
+
+    private String firstParam(Map<String, List<String>> params, String key) {
+        List<String> values = params.get(key);
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+        return values.get(0);
+    }
+
+    private String urlDecode(String value) {
+        try {
+            return URLDecoder.decode(value, StandardCharsets.UTF_8.name());
+        } catch (UnsupportedEncodingException ex) {
+            throw new IllegalStateException("UTF-8 not supported", ex);
+        }
+    }
+
+    private int resolveLimit(Map<String, List<String>> query, EndpointSettings endpoint) {
+        int fallback = endpoint != null && endpoint.getDefaultLimit() > 0 ? endpoint.getDefaultLimit() : logBuffer.getCapacity();
+        String rawLimit = firstParam(query, "limit");
+        if (rawLimit == null || rawLimit.trim().isEmpty()) {
+            return Math.max(1, fallback);
+        }
+        try {
+            int parsed = Integer.parseInt(rawLimit.trim());
+            return Math.max(1, Math.min(parsed, 5_000));
+        } catch (NumberFormatException ignored) {
+            return Math.max(1, fallback);
+        }
+    }
+
+    private LogDataProvider resolveProvider(RuntimeState state, EndpointKey key, String requested) {
+        String candidate = requested != null && !requested.trim().isEmpty()
+                ? requested.trim()
+                : state.settings.resolveDefaultSourceFor(key);
+        EndpointSettings endpoint = state.settings.getEndpoint(key);
+        if (endpoint != null && !endpoint.getAllowedSources().isEmpty() && !endpoint.getAllowedSources().contains(candidate)) {
+            return null;
+        }
+        LogDataProvider provider = state.providers.get(candidate);
+        if (provider != null) {
+            return provider;
+        }
+        if (endpoint != null && !endpoint.getAllowedSources().isEmpty()) {
+            for (String allowed : endpoint.getAllowedSources()) {
+                LogDataProvider fallback = state.providers.get(allowed);
+                if (fallback != null) {
+                    return fallback;
+                }
+            }
+        }
+        return state.providers.get(state.settings.getDefaultSource());
+    }
+
+    private List<String> describeAvailableSources(RuntimeState state, EndpointKey key) {
+        List<String> available = new ArrayList<>();
+        EndpointSettings endpoint = state.settings.getEndpoint(key);
+        for (Map.Entry<String, LogDataProvider> entry : state.providers.entrySet()) {
+            String name = entry.getKey();
+            LogDataProvider provider = entry.getValue();
+            if (endpoint != null && !endpoint.getAllowedSources().isEmpty() && !endpoint.getAllowedSources().contains(name)) {
+                continue;
+            }
+            if (provider.isAvailable()) {
+                available.add(name);
+            }
+        }
+        Collections.sort(available);
+        return available;
+    }
+
+    private void sendError(HttpExchange exchange, int status, String message) throws IOException {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("error", message);
+        sendJson(exchange, status, payload);
+    }
+
+    private void sendJson(HttpExchange exchange, int status, Object payload) throws IOException {
+        markResponded(exchange);
+        JsonResponse.send(exchange, status, JsonUtil.stringify(payload));
+    }
+
+    private void markResponded(HttpExchange exchange) {
+        exchange.setAttribute(ATTR_RESPONSE_SENT, Boolean.TRUE);
+    }
+
     private Map<String, Object> buildLastCheck(WatchdogSnapshot snapshot) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("timestamp", snapshot.getLastCheckMillis());
-        data.put("tps", round(snapshot.getLastCheckTps(), 2));
-        data.put("errors", snapshot.getLastCheckErrors());
+        data.put("agoSeconds", (System.currentTimeMillis() - snapshot.getLastCheckMillis()) / 1000.0);
         return data;
     }
 
     private Map<String, Object> buildLastTrigger(WatchdogSnapshot snapshot) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("timestamp", snapshot.getLastTriggerMillis());
-        data.put("tps", round(snapshot.getLastTriggerTps(), 2));
-        data.put("errors", snapshot.getLastTriggerErrors());
         data.put("reason", snapshot.getLastTriggerReason());
+        data.put("agoSeconds", (System.currentTimeMillis() - snapshot.getLastTriggerMillis()) / 1000.0);
         return data;
     }
 
-    private double round(double value, int decimals) {
-        if (!Double.isFinite(value)) {
-            return 0.0;
-        }
-        double scale = Math.pow(10, decimals);
-        return Math.round(value * scale) / scale;
+    private double round(double value, int places) {
+        double factor = Math.pow(10, places);
+        return Math.round(value * factor) / factor;
     }
 
     private interface ExchangeHandler {
         void handle(HttpExchange exchange) throws IOException;
     }
 
-    private static final class ApiConfig {
-        final String bind;
-        final int port;
-        final String token;
-        final boolean enabled;
+    private static final class RuntimeState {
+        private final ApiSettings settings;
+        private final String bind;
+        private final int port;
+        private final String token;
+        private final Map<String, LogDataProvider> providers;
 
-        ApiConfig(String bind, int port, String token, boolean enabled) {
+        private RuntimeState(ApiSettings settings, String bind, int port, String token, Map<String, LogDataProvider> providers) {
+            this.settings = settings;
             this.bind = bind;
             this.port = port;
             this.token = token;
-            this.enabled = enabled;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (!(o instanceof ApiConfig)) {
-                return false;
-            }
-            ApiConfig that = (ApiConfig) o;
-            return port == that.port && enabled == that.enabled && Objects.equals(bind, that.bind) && Objects.equals(token, that.token);
+            this.providers = Collections.unmodifiableMap(new LinkedHashMap<>(providers));
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(bind, port, token, enabled);
+            return Objects.hash(bind, port, token);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof RuntimeState)) {
+                return false;
+            }
+            RuntimeState other = (RuntimeState) obj;
+            return port == other.port && Objects.equals(bind, other.bind) && Objects.equals(token, other.token);
         }
     }
 
     private static final class ApiThreadFactory implements ThreadFactory {
         @Override
         public Thread newThread(Runnable r) {
-            Thread thread = new Thread(r, "EliteLogs-Api-" + THREAD_COUNTER.incrementAndGet());
+            Thread thread = new Thread(r, "EliteLogs-API-" + THREAD_COUNTER.incrementAndGet());
             thread.setDaemon(true);
             return thread;
         }

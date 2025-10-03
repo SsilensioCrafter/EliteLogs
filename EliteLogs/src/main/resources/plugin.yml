@@ -2,6 +2,8 @@ name: ${project.name}
 main: com.elitelogs.EliteLogsPlugin
 version: ${project.version}
 author: Elite
+softdepend:
+  - ProtocolLib
 commands:
   elitelogs:
     aliases: [elogs]
