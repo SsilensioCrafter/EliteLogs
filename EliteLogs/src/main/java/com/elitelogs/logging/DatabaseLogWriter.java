@@ -5,7 +5,6 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.bukkit.plugin.Plugin;
 
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -16,6 +15,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -448,12 +448,20 @@ public final class DatabaseLogWriter implements AutoCloseable {
 
     private Set<String> getExistingColumns(Connection connection, String table) throws SQLException {
         Set<String> columns = new LinkedHashSet<>();
-        DatabaseMetaData metaData = connection.getMetaData();
-        try (ResultSet rs = metaData.getColumns(connection.getCatalog(), null, table, null)) {
-            while (rs.next()) {
-                String name = rs.getString("COLUMN_NAME");
-                if (name != null) {
-                    columns.add(name.toLowerCase(Locale.ROOT));
+        String schema = currentSchema(connection);
+        if (schema == null) {
+            return columns;
+        }
+        String sql = "SELECT COLUMN_NAME FROM information_schema.columns WHERE table_schema = ? AND table_name = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, schema);
+            ps.setString(2, table);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String name = rs.getString(1);
+                    if (name != null) {
+                        columns.add(name.toLowerCase(Locale.ROOT));
+                    }
                 }
             }
         }
@@ -461,13 +469,21 @@ public final class DatabaseLogWriter implements AutoCloseable {
     }
 
     private Set<String> getExistingIndexes(Connection connection, String table) throws SQLException {
-        Set<String> indexes = new LinkedHashSet<>();
-        DatabaseMetaData metaData = connection.getMetaData();
-        try (ResultSet rs = metaData.getIndexInfo(connection.getCatalog(), null, table, false, false)) {
-            while (rs.next()) {
-                String name = rs.getString("INDEX_NAME");
-                if (name != null) {
-                    indexes.add(name);
+        Set<String> indexes = new HashSet<>();
+        String schema = currentSchema(connection);
+        if (schema == null) {
+            return indexes;
+        }
+        String sql = "SELECT INDEX_NAME FROM information_schema.statistics WHERE table_schema = ? AND table_name = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, schema);
+            ps.setString(2, table);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String name = rs.getString(1);
+                    if (name != null) {
+                        indexes.add(name);
+                    }
                 }
             }
         }
@@ -483,14 +499,42 @@ public final class DatabaseLogWriter implements AutoCloseable {
     }
 
     private ColumnMeta getColumnMeta(Connection connection, String table, String column) throws SQLException {
-        DatabaseMetaData metaData = connection.getMetaData();
-        try (ResultSet rs = metaData.getColumns(connection.getCatalog(), null, table, column)) {
-            while (rs.next()) {
-                String name = rs.getString("COLUMN_NAME");
-                if (name != null && name.equalsIgnoreCase(column)) {
-                    String typeName = rs.getString("TYPE_NAME");
-                    int size = rs.getInt("COLUMN_SIZE");
-                    return new ColumnMeta(typeName, size);
+        String schema = currentSchema(connection);
+        if (schema == null) {
+            return null;
+        }
+        String sql = "SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, COLUMN_TYPE FROM information_schema.columns " +
+                "WHERE table_schema = ? AND table_name = ? AND column_name = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, schema);
+            ps.setString(2, table);
+            ps.setString(3, column);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String dataType = rs.getString(1);
+                    int length = rs.getInt(2);
+                    if (rs.wasNull()) {
+                        length = -1;
+                    }
+                    String columnType = rs.getString(3);
+                    return new ColumnMeta(dataType, columnType, length);
+                }
+            }
+        }
+        return null;
+    }
+
+    private String currentSchema(Connection connection) throws SQLException {
+        String catalog = connection.getCatalog();
+        if (catalog != null && !catalog.trim().isEmpty()) {
+            return catalog;
+        }
+        try (Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery("SELECT DATABASE()")) {
+            if (rs.next()) {
+                String name = rs.getString(1);
+                if (name != null && !name.trim().isEmpty()) {
+                    return name.trim();
                 }
             }
         }
@@ -737,23 +781,37 @@ public final class DatabaseLogWriter implements AutoCloseable {
     }
 
     private static final class ColumnMeta {
-        private final String typeName;
-        private final int size;
+        private final String dataType;
+        private final String columnType;
+        private final int length;
 
-        private ColumnMeta(String typeName, int size) {
-            this.typeName = typeName;
-            this.size = size;
+        private ColumnMeta(String dataType, String columnType, int length) {
+            this.dataType = dataType;
+            this.columnType = columnType;
+            this.length = length;
         }
 
         boolean isBinary16() {
-            if (typeName == null) {
+            String normalizedData = dataType != null ? dataType.toUpperCase(Locale.ROOT) : "";
+            String normalizedColumn = columnType != null ? columnType.toUpperCase(Locale.ROOT) : "";
+            if (!normalizedData.contains("BINARY") && !normalizedColumn.contains("BINARY")) {
                 return false;
             }
-            String normalized = typeName.toUpperCase(Locale.ROOT);
-            if (!normalized.contains("BINARY")) {
-                return false;
+            if (length > 0) {
+                return length == 16;
             }
-            return size == 16;
+            if (normalizedColumn.contains("BINARY")) {
+                int open = normalizedColumn.indexOf('(');
+                int close = normalizedColumn.indexOf(')', open + 1);
+                if (open > 0 && close > open) {
+                    try {
+                        int parsed = Integer.parseInt(normalizedColumn.substring(open + 1, close).trim());
+                        return parsed == 16;
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+            return false;
         }
     }
 
