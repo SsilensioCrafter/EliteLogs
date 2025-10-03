@@ -318,6 +318,7 @@ watchdog:
     create-crash-report: true # Generate crash report
     discord-alert: true       # Send alert to Discord
 
+```
 
 ---
 
