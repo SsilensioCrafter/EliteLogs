@@ -49,6 +49,7 @@
 
 ### ✨ Краткий обзор возможностей
 - Полное покрытие логами: чат, команды, экономика, бой, инвентарь, статистика, консоль, сессии, варны, ошибки, отключения и многое другое.
+- Опциональное зеркалирование в MySQL: для каждого типа логов автоматически создаётся отдельная таблица (например, `elitelogs_chat` или `elitelogs_errors`) с JSON-массивами тегов, структурированным контекстом, настраиваемым префиксом и автоматическим обновлением схемы/индексов — файловое хранилище при этом продолжает работать.
 - Папка `/logs/disconnects` фиксирует отклонения на логине, кики, выходы, ответы на ресурспак и тексты экранов отключения (при наличии ProtocolLib) в формате ключ=значение.
 - Перехват через ProtocolLib можно отключить или включить флагом `logs.disconnects.capture-screen`.
 - Персональные логи в `logs/<module>/players/<uuid>` и истории сессий в `logs/players/<playerName>/sessions`.
@@ -79,6 +80,14 @@
 - **console** — копия живой консоли для аудита.
 - **rcon** — команды, отправленные через RCON-сессии.
 - **suppressed** — сообщения, которые были отфильтрованы другими модулями.
+
+#### MySQL-хранилище (`storage.database`)
+- `enabled` и доступы: при включении каждый активный тип логов зеркалируется в БД, не мешая файловым логам.
+- `table-prefix`: задаёт префикс для названий таблиц (`elitelogs_chat`, `elitelogs_errors` и т. д.).
+- `flush-interval-ticks`: определяет, как часто воркер сбрасывает очередь в БД (1 тик = 50 мс).
+- `auto-upgrade`: автоматически создаёт/обновляет таблицы, индексы и реестр категорий при подключении.
+- Структура таблицы: `occurred_at`, `event_type`, `message`, `player_uuid`, `player_name`, `tags` (JSON-массив) и `context` (JSON-объект с категорией, игроком и разобранными тегами).
+- Служебные таблицы (`<prefix>schema_info`, `<prefix>registry`) поддерживаются автоматически и помогают панелям понимать текущую схему.
 
 #### Пайплайн отключений
 - Фиксирует стадии `prelogin-deny`, `login-deny`, `kick`, `quit`, `resource-pack`, `disconnect-screen`.
@@ -237,6 +246,27 @@ logs:
     suppressed: true          # Catch-all bucket for anything muted elsewhere
   disconnects:
     capture-screen: true      # Requires ProtocolLib to read the disconnect screen text
+
+# Database mirroring (optional MySQL)
+storage:
+  database:
+    enabled: false
+    host: "127.0.0.1"         # Hostname or IP of your MySQL server
+    port: 3306                # MySQL port
+    database: "elitelogs"     # Database/schema name
+    username: "elitelogs"
+    password: ""
+    params: "useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true&serverTimezone=UTC&characterEncoding=UTF-8"
+    jdbc-url: ""             # Leave empty to auto-compose from the values above
+    table-prefix: "elitelogs_"
+    batch-size: 100           # Entries flushed per batch
+    flush-interval-ticks: 2   # Queue flush cadence (1 tick = 50 ms)
+    auto-upgrade: true        # Keep registry and tables aligned with plugin expectations
+    pool:
+      minimum-idle: 1
+      maximum-pool-size: 8
+      connection-timeout-millis: 8000
+      max-lifetime-millis: 1800000
 
 # Player sessions summary
 sessions:
