@@ -122,14 +122,14 @@ public class DisconnectListener implements Listener {
         }
         try {
             Class.forName("com.comphenix.protocol.ProtocolLibrary");
-            Class<?> hookClass = Class.forName("com.elitelogs.listeners.ProtocolLibDisconnectInterceptor");
-            Object instance = hookClass.getConstructor(Plugin.class, LogRouter.class).newInstance(plugin, router);
-            if (instance instanceof DisconnectPacketInterceptor interceptor) {
-                return HookAttempt.info(interceptor,
-                        "[EliteLogs] ProtocolLib detected; disconnect screen capture enabled.");
-            }
-            return HookAttempt.warn("ProtocolLib detected but disconnect interceptor could not be initialised; disconnect screen capture disabled.");
         } catch (Throwable ex) {
+            return HookAttempt.failure(ex);
+        }
+        try {
+            DisconnectPacketInterceptor interceptor = new ProtocolLibDisconnectInterceptor(plugin, router);
+            return HookAttempt.info(interceptor,
+                    "[EliteLogs] ProtocolLib detected; disconnect screen capture enabled.");
+        } catch (LinkageError | RuntimeException ex) {
             return HookAttempt.failure(ex);
         }
     }
