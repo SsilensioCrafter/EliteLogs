@@ -18,21 +18,55 @@
 
 ---
 
-## 📖 Usage
+## 📖 Usage (TL;DR)
 
-- `/elogs help` → show this help message  
-- `/elogs reload` → reload the plugin configuration  
-- `/elogs inspector` → run the Inspector for quick analysis of sessions, chat, commands, and errors  
-- `/elogs metrics` → display logging metrics and statistics  
-- `/elogs export` → export logs into external-friendly formats  
-- `/elogs rotate [force]` → archive old logs (add `force` to rotate immediately)  
-- `/elogs logs` → list available log categories (chat, commands, sessions, etc.)  
-- `/elogs version` → show the current plugin version  
+Once the jar is installed you only need two steps:
+
+1. Run `/elogs help` in-game or from console to check command permissions.
+2. Tail the `/plugins/EliteLogs/logs/` folder; a subdirectory is created per module automatically.
 
 ---
 
-## ✨ Features
-- Comprehensive logging: chat, commands, economy, combat, inventory, stats, console, sessions, warnings, errors, and more.
+## 🛠️ Command Reference
+
+Each subcommand is safe to execute live — no restarts required.
+
+### `/elogs help`
+Prints the localized help page with every subcommand, including any modules that have been disabled in `config.yml` so staff know what to expect.
+
+### `/elogs reload`
+Reloads `config.yml`, reinitialises module flags inside the live `LogRouter`, and revalidates the HTTP API token. Use this after editing the config from disk.
+
+### `/elogs inspector`
+Captures a full diagnostic snapshot: plugin list, mod list (for modded cores), JVM flags, config hashes, and dumps the report into `logs/inspector/`.
+
+### `/elogs metrics`
+Shows live TPS, memory usage, player count, watchdog thresholds, and the status of collectors. Helpful for spotting lag spikes without leaving the game.
+
+### `/elogs export`
+Packages the latest logs (or a requested range) into a zip file under `/exports/` for easy sharing. Ideal for sending evidence to other staff.
+
+### `/elogs rotate [force]`
+Forces log rotation immediately; with `force` it ignores the minimum interval, otherwise it respects the configured schedule. Archives land in `/logs/archive/` when `logs.archive` is true.
+
+### `/elogs apikey` (alias `/elogs token`)
+Admin-only command for the HTTP API. Supports `show`, `status`, and `regenerate` arguments so you can retrieve or rotate the secret without opening the YAML file.
+
+### `/elogs logs [toggle <module>]`
+Lists every configured log module with a coloured enabled/disabled indicator sourced from the live router snapshot. Use `toggle <module>` to flip a flag — the router is reloaded instantly and the setting persists to `config.yml`.
+
+### `/elogs version`
+Reports the plugin version, git commit (if available), and server compatibility information.
+
+### `/elogs session`
+Displays the current tracked session summaries, including duration and active players. Use it during events to capture highlights quickly.
+
+---
+
+## ✨ Features at a Glance
+- Comprehensive logging: chat, commands, economy, combat, inventory, stats, console, sessions, warnings, errors, disconnects, and more.
+- Dedicated `/logs/disconnects` folder captures login denials, kicks, resource-pack responses, and even server disconnect screens (via ProtocolLib when available) with normalized key/value fields (`result`, `ip`, `reason`, `source`, etc.).
+- Optional ProtocolLib capture can now be toggled through `logs.disconnects.capture-screen` for hosts that prefer to disable JSON snooping.
 - Per-player logs with dedicated folders (`logs/<module>/players/<uuid>`) and session histories (`logs/players/<playerName>/sessions`).
 - Global daily logs (`logs/<module>/global-YYYY-MM-DD.log`) for quick server-wide insights.
 - Configurable modules — enable or disable exactly what you need via `config.yml`.
@@ -44,6 +78,58 @@
 - Legacy mode available for flat player log files, if you miss the old days.
 - Built-in localization packs (EN, RU, DE, FR, ES) with graceful English fallback for missing keys.
 - Written with more caffeine than code — but stable enough to trust your server with.
+
+---
+
+## 🧭 Module & Function Guide
+
+### Logging modules (`logs.types`)
+- **warns** — records anything elevated via `plugin.getLogger().warning()` or similar API calls.
+- **errors** — captures stack traces and fatal errors so you can diff recurring crashes.
+- **chat** — stores public chat, including UUID/name metadata for replaying context.
+- **commands** — logs every command execution with executor and arguments.
+- **players** — join/quit flow, teleport summaries, and per-player mirrors when `split-by-player` is enabled.
+- **disconnects** — the structured pipeline for pre-login denials, login kicks, quits, resource-pack statuses, and (optionally) disconnect screens.
+- **combat** — PvP/PvE hits, kills, and death context (weapon, attacker, world).
+- **inventory** — chest access, ender-chest interactions, container movements, shulker loot.
+- **economy** — Vault-backed balance changes, trades, shop purchases.
+- **stats** — advancements, statistic milestones, playtime counters.
+- **console** — a rotating copy of the live console for forensics.
+- **rcon** — everything executed through remote console connections.
+- **suppressed** — overflow bucket that stores messages muted elsewhere (handy for auditing filters).
+
+### Disconnect pipeline
+- Phases recorded: `prelogin-deny`, `login-deny`, `kick`, `quit`, `resource-pack`, `disconnect-screen`.
+- Key/value layout: `[phase] uuid=<...> name=<...> result=<...> reason=<...>` etc. No YAML/JSON parsing required.
+- ProtocolLib hook writes both human-readable text and the raw JSON payload for disconnect screens when enabled.
+- Player mirrors are synced to `/logs/disconnects/players/<uuid>/` alongside global streams.
+
+### Session reporting
+- Global session summaries stored in `/logs/sessions/global/`, refreshed every `sessions.autosave-minutes`.
+- Per-player session history (login duration, deaths, economy delta) written to `/logs/sessions/players/<uuid>/`.
+- Triggered automatically on join/quit and when watchdog fires to capture the current state.
+
+### HTTP API
+- `api.auth-token` auto-generates on first launch; `/elogs apikey` exposes management options.
+- Endpoints provide status, metrics, watchdog insights, and streamed log buffers.
+- Rate limiting is handled by the in-memory log buffer size (`api.log-history`).
+
+### Discord alerts
+- `discord.send` block lets you enable granular topics: errors, warnings, sessions, watchdog, inspector.
+- Rate-limiter prevents spam by enforcing `discord.rate-limit-seconds` between posts.
+
+### Watchdog automation
+- Fires when TPS drops below `watchdog.tps-threshold` or errors exceed `watchdog.error-threshold`.
+- Automatically runs the inspector, generates crash reports, and notifies Discord (if configured).
+
+---
+
+### 🔌 Disconnect log format
+
+- Every entry is emitted as `[phase] key=value …` so scripts and SIEM pipelines can parse them easily.
+- Phases: `prelogin-deny`, `login-deny`, `kick`, `quit`, `resource-pack`, and `disconnect-screen` (ProtocolLib).
+- Common keys include `result`, `ip`, `source`, `cause`, `status`, `reason`, and `raw-json` (disconnect screen payloads).
+- Per-player mirrors are written to `logs/disconnects/players/<uuid>/global-YYYY-MM-DD.log` when `split-by-player` is enabled.
 
 ## 🧩 Version compatibility
 | Range | What works |
@@ -80,7 +166,8 @@ EliteLogs ships with an optional HTTP server so your SsilensioWeb admin panel (o
 - `GET /api/v1/logs/<category>?limit=100` — most recent lines for a category (limit defaults to the configured `log-history`).
 
 ### Authentication
-- Leave `auth-token` empty for open access, or set a string and pass it as the `X-API-Key` header (or `token` query parameter).
+- Leave `auth-token` empty and EliteLogs will auto-generate a strong token on startup; use `/elogs apikey show` (or `regenerate`) to reveal or rotate it safely.
+- Provide the token via the `X-API-Key` header (preferred) or the `token` query parameter.
 - `log-history` controls how many lines are cached per category for instant API responses.
 - Bind the server to `127.0.0.1` when using a reverse proxy; use `0.0.0.0` only if you really want to expose it publicly.
 
@@ -115,11 +202,17 @@ If you want to treat it like a **"Do What The Heck You Want License"**, go for i
 ## ⚙️ Config
 Yes, it has a config. Even your laziest admin can use it:
 
+### Version metadata
+- `version` is stamped during the build so the YAML always matches the jar you are running. Leave it untouched; `/elogs reload` will rewrite the value after you deploy an update.
+
 ```yaml
 # ============================
 #  EliteLogs Configuration
 #  vibe-coded © 2025
 # ============================
+
+# Version metadata (auto-managed during builds)
+version: "1.2.1"        # Overwritten on reload/update
 
 # Main switches
 enabled: true     # Enable/disable EliteLogs
@@ -158,23 +251,27 @@ discord:
 # Logging system
 logs:
   rotate: true                # Rotate logs (create new files)
-  keep-days: 30               # Keep logs for X days (-1 = forever)
-  archive: true               # Archive old logs (zip/tar)
+  keep-days: 30               # Number of days to retain daily archives (-1 = forever)
+  archive: true               # Compress rotated logs into /logs/archive for long-term storage
   split-by-player: true       # Write per-player logs in module folders
   legacy:
     flat-player-files: false  # Old style: player-Name-YYYY-MM-DD.log (not recommended)
   types:
-    warns: true
-    errors: true
-    chat: true
-    commands: true
+    warns: true               # Captures anything logged through plugin.warn(...)
+    errors: true              # Fatal stacktraces and exceptions dumped by plugins
+    chat: true                # Global chat history with sender UUID/username metadata
+    commands: true            # Every command dispatch (player + console) with context
     players: true             # Includes join/quit events and per-player folders
-    combat: true
-    inventory: true
-    economy: true
-    stats: true
-    console: true
-    suppressed: true
+    disconnects: true         # Tracks login denials, kicks, resource pack status, disconnect screens
+    combat: true              # PvP/PvE damage, kills, and death summaries
+    inventory: true           # Item pickups/drops, container access, trade logs
+    economy: true             # Vault economy transactions and balance updates
+    stats: true               # Stat/advancement milestones, playtime counters
+    console: true             # Mirrors the live console output into rotating files
+    rcon: true                # Remote console sessions and issued commands
+    suppressed: true          # Catch-all bucket for anything muted elsewhere
+  disconnects:
+    capture-screen: true      # Requires ProtocolLib to read the disconnect screen text
 
 # Player sessions summary
 sessions:
@@ -201,7 +298,7 @@ api:
   enabled: false
   bind: "127.0.0.1"
   port: 9173
-  auth-token: ""
+  auth-token: ""             # Leave blank to auto-generate, manage via /elogs apikey
   log-history: 250
 
 # Message suppressor / spam filter
@@ -222,3 +319,16 @@ watchdog:
     discord-alert: true       # Send alert to Discord
 
 
+---
+
+## 🛠️ Building
+
+1. Make sure JDK 8+ and Maven are installed.
+2. Run `mvn -f EliteLogs/pom.xml -DskipTests package` from the repository root (or `cd EliteLogs` first and run `mvn -DskipTests package`).
+   - Minimal ProtocolLib 5.1.0 APIs live in `EliteLogs/src/stubs/java`; the build helper adds them during compilation and the jar plugin excludes them from the final artifact. Production servers still need the real ProtocolLib plugin to capture DISCONNECT packets.
+
+---
+
+## 🌍 Translations
+
+- 🇷🇺 [Полная версия README на русском](README.ru.md)
