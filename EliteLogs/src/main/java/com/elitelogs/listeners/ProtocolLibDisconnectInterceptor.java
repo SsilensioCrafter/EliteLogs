@@ -36,8 +36,8 @@ class ProtocolLibDisconnectInterceptor extends PacketAdapter implements Disconne
         if (player == null) {
             return;
         }
-        WrappedChatComponent component = event.getPacket().getChatComponents().readSafely(0);
-        String reason = component != null ? component.getJson() : null;
+        WrappedChatComponent component = extractChatComponent(event.getPacket());
+        String reason = component != null ? safeGetJson(component) : null;
         String plain = toPlainText(reason);
         if ((plain == null || plain.isEmpty()) && (reason == null || reason.isEmpty())) {
             return;
@@ -51,6 +51,88 @@ class ProtocolLibDisconnectInterceptor extends PacketAdapter implements Disconne
             builder.attribute("raw-json", reason);
         }
         router.disconnect(builder.build());
+    }
+
+    private WrappedChatComponent extractChatComponent(Object packetContainer) {
+        if (packetContainer == null) {
+            return null;
+        }
+
+        // Modern ProtocolLib exposes getChatComponents(); older builds may require using the generic modifier API.
+        WrappedChatComponent component = tryInvokeChatComponents(packetContainer);
+        if (component != null) {
+            return component;
+        }
+
+        // Fallback to the generic modifier API so we can pull chat components regardless of helper availability.
+        return tryModifierLookup(packetContainer);
+    }
+
+    private WrappedChatComponent tryInvokeChatComponents(Object packetContainer) {
+        try {
+            Method accessor = packetContainer.getClass().getMethod("getChatComponents");
+            Object modifier = accessor.invoke(packetContainer);
+            return readChatComponent(modifier);
+        } catch (NoSuchMethodException ignored) {
+            // Method removed in newer ProtocolLib builds.
+        } catch (Throwable ignored) {
+            // Any reflective failure should fall back to alternative strategies.
+        }
+        return null;
+    }
+
+    private WrappedChatComponent tryModifierLookup(Object packetContainer) {
+        try {
+            Method getModifier = packetContainer.getClass().getMethod("getModifier");
+            Object modifier = getModifier.invoke(packetContainer);
+            if (modifier == null) {
+                return null;
+            }
+            Method withType = modifier.getClass().getMethod("withType", Class.class);
+            Object typed = withType.invoke(modifier, WrappedChatComponent.class);
+            return readChatComponent(typed);
+        } catch (Throwable ignored) {
+            // Nothing else we can do here – fall back to vanilla disconnect logging.
+        }
+        return null;
+    }
+
+    private WrappedChatComponent readChatComponent(Object modifier) {
+        if (modifier == null) {
+            return null;
+        }
+        try {
+            Method readSafely = modifier.getClass().getMethod("readSafely", int.class);
+            Object value = readSafely.invoke(modifier, 0);
+            if (value instanceof WrappedChatComponent) {
+                return (WrappedChatComponent) value;
+            }
+        } catch (NoSuchMethodException ignored) {
+            // Older StructureModifier instances may only expose read(int).
+            try {
+                Method read = modifier.getClass().getMethod("read", int.class);
+                Object value = read.invoke(modifier, 0);
+                if (value instanceof WrappedChatComponent) {
+                    return (WrappedChatComponent) value;
+                }
+            } catch (Throwable ignoredToo) {
+                // Continue on to return null.
+            }
+        } catch (Throwable ignored) {
+            // If the modifier API throws, pretend we never saw a chat component.
+        }
+        return null;
+    }
+
+    private String safeGetJson(WrappedChatComponent component) {
+        if (component == null) {
+            return null;
+        }
+        try {
+            return component.getJson();
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     @Override
