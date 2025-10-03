@@ -17,6 +17,7 @@ import java.lang.reflect.Method;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
 
 class ProtocolLibDisconnectInterceptor extends PacketAdapter implements DisconnectPacketInterceptor {
     private final LogRouter router;
@@ -42,8 +43,8 @@ class ProtocolLibDisconnectInterceptor extends PacketAdapter implements Disconne
         if ((plain == null || plain.isEmpty()) && (reason == null || reason.isEmpty())) {
             return;
         }
-        DisconnectLogEntry.Builder builder = DisconnectLogEntry.phase("disconnect-screen")
-                .player(player.getUniqueId(), player.getName());
+        DisconnectLogEntry.Builder builder = DisconnectLogEntry.phase("disconnect-screen");
+        applyPlayerMetadata(builder, player);
         if (plain != null && !plain.isEmpty()) {
             builder.attribute("reason", plain);
         }
@@ -207,6 +208,42 @@ class ProtocolLibDisconnectInterceptor extends PacketAdapter implements Disconne
         }
         String description = String.valueOf(type).toLowerCase(Locale.ROOT);
         return !description.contains("unregistered");
+    }
+
+    private void applyPlayerMetadata(DisconnectLogEntry.Builder builder, Player player) {
+        if (builder == null || player == null) {
+            return;
+        }
+
+        UUID uuid = safeUniqueId(player);
+        String name = safeName(player);
+
+        if (uuid != null && name != null) {
+            builder.player(uuid, name);
+        } else if (uuid != null) {
+            builder.player(uuid);
+        } else if (name != null && !name.isEmpty()) {
+            builder.playerName(name);
+        }
+    }
+
+    private UUID safeUniqueId(Player player) {
+        try {
+            return player.getUniqueId();
+        } catch (UnsupportedOperationException ignored) {
+            // ProtocolLib temporary players do not expose UUIDs during early handshake.
+        } catch (Throwable ignored) {
+            // Any unexpected exception should not break disconnect logging.
+        }
+        return null;
+    }
+
+    private String safeName(Player player) {
+        try {
+            return player.getName();
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
 }
