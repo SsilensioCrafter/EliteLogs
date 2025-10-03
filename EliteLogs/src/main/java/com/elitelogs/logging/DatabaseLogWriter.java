@@ -119,6 +119,81 @@ public final class DatabaseLogWriter implements AutoCloseable {
         queue.offer(entry);
     }
 
+    public List<DbRecord> fetchRecentRecords(String category, int limit) {
+        if (category == null || category.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        int normalizedLimit = Math.max(1, Math.min(limit, 5_000));
+        String table = tableNameFor(category);
+        try (Connection connection = dataSource.getConnection()) {
+            ensureTable(connection, category, table);
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "SELECT occurred_at, event_type, message, player_uuid, player_name, tags, context " +
+                            "FROM `" + table + "` ORDER BY occurred_at DESC LIMIT ?")) {
+                ps.setInt(1, normalizedLimit);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return extractRecords(category, rs);
+                }
+            }
+        } catch (SQLException ex) {
+            logger.log(Level.WARNING, "[EliteLogs] Failed to fetch recent MySQL logs for " + category, ex);
+        }
+        return Collections.emptyList();
+    }
+
+    public List<DbRecord> searchRecords(String category, String query, int limit) {
+        if (category == null || category.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        String trimmed = query != null ? query.trim() : "";
+        if (trimmed.isEmpty()) {
+            return fetchRecentRecords(category, limit);
+        }
+        int normalizedLimit = Math.max(1, Math.min(limit, 5_000));
+        String table = tableNameFor(category);
+        try (Connection connection = dataSource.getConnection()) {
+            ensureTable(connection, category, table);
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "SELECT occurred_at, event_type, message, player_uuid, player_name, tags, context " +
+                            "FROM `" + table + "` WHERE message LIKE ? OR player_name LIKE ? OR event_type LIKE ? " +
+                            "ORDER BY occurred_at DESC LIMIT ?")) {
+                String pattern = '%' + trimmed + '%';
+                ps.setString(1, pattern);
+                ps.setString(2, pattern);
+                ps.setString(3, pattern);
+                ps.setInt(4, normalizedLimit);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return extractRecords(category, rs);
+                }
+            }
+        } catch (SQLException ex) {
+            logger.log(Level.WARNING, "[EliteLogs] Failed to search MySQL logs for " + category, ex);
+        }
+        return Collections.emptyList();
+    }
+
+    public List<String> listRegisteredCategories() {
+        LinkedHashSet<String> categories = new LinkedHashSet<>();
+        categories.addAll(tableNames.keySet());
+        try (Connection connection = dataSource.getConnection()) {
+            ensureRegistryTable(connection);
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "SELECT category FROM `" + registryTable + "` ORDER BY category ASC")) {
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        String category = rs.getString(1);
+                        if (category != null && !category.trim().isEmpty()) {
+                            categories.add(category.trim());
+                        }
+                    }
+                }
+            }
+        } catch (SQLException ex) {
+            logger.log(Level.WARNING, "[EliteLogs] Failed to list MySQL categories: " + ex.getMessage(), ex);
+        }
+        return new ArrayList<>(categories);
+    }
+
     @Override
     public void close() {
         if (!running.compareAndSet(true, false)) {
@@ -533,6 +608,37 @@ public final class DatabaseLogWriter implements AutoCloseable {
         return bytes;
     }
 
+    private static UUID bytesToUuid(byte[] bytes) {
+        if (bytes == null || bytes.length != 16) {
+            return null;
+        }
+        long msb = 0L;
+        long lsb = 0L;
+        for (int i = 0; i < 8; i++) {
+            msb = (msb << 8) | (bytes[i] & 0xFF);
+        }
+        for (int i = 8; i < 16; i++) {
+            lsb = (lsb << 8) | (bytes[i] & 0xFF);
+        }
+        return new UUID(msb, lsb);
+    }
+
+    private List<DbRecord> extractRecords(String category, ResultSet rs) throws SQLException {
+        List<DbRecord> records = new ArrayList<>();
+        while (rs.next()) {
+            Timestamp ts = rs.getTimestamp(1);
+            Instant occurredAt = ts != null ? ts.toInstant() : null;
+            String eventType = rs.getString(2);
+            String message = rs.getString(3);
+            UUID uuid = bytesToUuid(rs.getBytes(4));
+            String playerName = rs.getString(5);
+            String tagsJson = rs.getString(6);
+            String contextJson = rs.getString(7);
+            records.add(new DbRecord(category, occurredAt, eventType, message, uuid, playerName, tagsJson, contextJson));
+        }
+        return records;
+    }
+
     private static String toJsonArray(String[] tags) {
         if (tags == null || tags.length == 0) {
             return "[]";
@@ -685,6 +791,61 @@ public final class DatabaseLogWriter implements AutoCloseable {
 
         boolean isValid() {
             return !poison && category != null && !category.isEmpty() && message != null;
+        }
+    }
+
+    public static final class DbRecord {
+        private final String category;
+        private final Instant occurredAt;
+        private final String eventType;
+        private final String message;
+        private final UUID playerUuid;
+        private final String playerName;
+        private final String tagsJson;
+        private final String contextJson;
+
+        private DbRecord(String category, Instant occurredAt, String eventType, String message,
+                         UUID playerUuid, String playerName, String tagsJson, String contextJson) {
+            this.category = category;
+            this.occurredAt = occurredAt;
+            this.eventType = eventType;
+            this.message = message;
+            this.playerUuid = playerUuid;
+            this.playerName = playerName;
+            this.tagsJson = tagsJson;
+            this.contextJson = contextJson;
+        }
+
+        public String getCategory() {
+            return category;
+        }
+
+        public Instant getOccurredAt() {
+            return occurredAt;
+        }
+
+        public String getEventType() {
+            return eventType;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public UUID getPlayerUuid() {
+            return playerUuid;
+        }
+
+        public String getPlayerName() {
+            return playerName;
+        }
+
+        public String getTagsJson() {
+            return tagsJson;
+        }
+
+        public String getContextJson() {
+            return contextJson;
         }
     }
 }

@@ -166,19 +166,27 @@ Displays the current tracked session summaries, including duration and active pl
 ---
 
 ## 🔌 HTTP API
-EliteLogs ships with an optional HTTP server so your SsilensioWeb admin panel (or any other dashboard) can pull data straight from the plugin. Enable it by flipping the `api.enabled` flag in `config.yml` and adjusting the bind address/port if needed.
+EliteLogs ships with a modular HTTP server so your SsilensioWeb admin panel (or any other dashboard) can pull data straight from the plugin. Flip the `api.enabled` flag in `config.yml`, pick which endpoints should boot, and decide whether they read from the in-memory buffer, flat files, or the MySQL mirror.
 
 ### Endpoints
 - `GET /api/v1/status` — plugin version, enabled modules, and configuration flags.
 - `GET /api/v1/metrics` — live TPS/CPU/memory plus the active session counters and watchdog thresholds.
 - `GET /api/v1/watchdog` — watchdog thresholds, trigger timings, error counters, and the most recent trigger reason.
-- `GET /api/v1/logs` — list of log categories currently buffered in memory.
-- `GET /api/v1/logs/<category>?limit=100` — most recent lines for a category (limit defaults to the configured `log-history`).
+- `GET /api/v1/sessions` — current session snapshot plus the most recent YAML reports saved to disk.
+- `GET /api/v1/logs` — catalog of categories, available data sources, and the default provider for log lookups.
+- `GET /api/v1/logs/<category>` — fetch the newest records for a category. Supports `limit`, `source=buffer|files|database`, and `q=<substring>` to filter without hitting the search endpoint.
+- `GET /api/v1/logs/search?category=<name>&q=<term>` — server-side substring search backed by whichever provider you select.
+
+### Data sources & tuning
+- `default-source` picks the provider the API uses when a request does not specify `source=`.
+- `sources` lets you enable/disable the live buffer, filesystem reader, and MySQL mirror independently (and point the file reader at a custom directory if needed).
+- Each endpoint exposes `allow-sources` so you can pin sensitive calls (for example, `/logs/search`) to the database only while serving `/logs` from cached files.
+- `default-limit` per endpoint caps how many rows are returned when the client does not pass `limit=`.
 
 ### Authentication
 - Leave `auth-token` empty and EliteLogs will auto-generate a strong token on startup; use `/elogs apikey show` (or `regenerate`) to reveal or rotate it safely.
 - Provide the token via the `X-API-Key` header (preferred) or the `token` query parameter.
-- `log-history` controls how many lines are cached per category for instant API responses.
+- `log-history` controls how many lines the in-memory buffer keeps for instant API responses (file/database providers are not limited by it).
 - Bind the server to `127.0.0.1` when using a reverse proxy; use `0.0.0.0` only if you really want to expose it publicly.
 
 ---
@@ -337,7 +345,38 @@ api:
   bind: "127.0.0.1"
   port: 9173
   auth-token: ""             # Leave blank to auto-generate, manage via /elogs apikey
-  log-history: 250
+  log-history: 250           # In-memory buffer size for instant responses
+  default-source: buffer     # buffer | files | database
+  sources:
+    buffer:
+      enabled: true          # Live tail of everything passing through the router
+    files:
+      enabled: true
+      root: logs             # Where the file provider should scan for categories
+    database:
+      enabled: true          # Requires storage.database.enabled = true
+  endpoints:
+    status:
+      enabled: true
+    metrics:
+      enabled: true
+    watchdog:
+      enabled: true
+    sessions:
+      enabled: true
+    logs:
+      enabled: true
+      default-limit: 250
+      allow-sources:
+        - buffer
+        - files
+        - database
+    search:
+      enabled: true
+      default-limit: 250
+      allow-sources:
+        - database
+        - files
 
 # Message suppressor / spam filter
 suppressor:

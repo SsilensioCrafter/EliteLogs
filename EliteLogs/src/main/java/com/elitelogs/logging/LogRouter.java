@@ -135,6 +135,18 @@ public class LogRouter {
         addListener(listener);
     }
 
+    public DatabaseLogWriter getDatabaseWriter() {
+        return databaseWriter;
+    }
+
+    public Collection<String> getActiveCategories() {
+        ConfigSnapshot snapshot = this.configSnapshot;
+        if (snapshot == null) {
+            return Collections.emptyList();
+        }
+        return snapshot.getEnabledCategories();
+    }
+
     public void warn(String message) {
         write("warns", message);
     }
